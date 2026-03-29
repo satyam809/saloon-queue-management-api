@@ -1,0 +1,238 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { SalonService } from './salon.service';
+import { CreateSalonDto } from './dto/create-salon.dto';
+import { UpdateSalonDto } from './dto/update-salon.dto';
+import { ApproveSalonDto } from './dto/approve-salon.dto';
+import { RejectSalonDto } from './dto/reject-salon.dto';
+import { SalonQueryDto } from './dto/salon-query.dto';
+import { SalonResponseDto } from './dto/salon-response.dto';
+import { Public } from '@common/decorators/public.decorator';
+import { Roles } from '@common/decorators/roles.decorator';
+import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { Permission } from '@common/enums/permission.enum';
+import { Role } from '@common/enums/role.enum';
+import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
+
+@ApiTags('Salons')
+@ApiBearerAuth()
+@Controller('salons')
+export class SalonController {
+  constructor(private readonly salonService: SalonService) {}
+
+  // ─── Public: browse active salons ─────────────────────────────────────────
+
+  /**
+   * GET /salons
+   * Public: returns only ACTIVE salons.
+   * Authenticated admins & onboarding staff: all statuses with optional filter.
+   * SALON_OWNER: their own salons (any status).
+   */
+  @Public()
+  @Get()
+  @ApiOperation({
+    summary: 'List salons',
+    description:
+      'Public callers see only ACTIVE salons. ' +
+      'Admins and onboarding staff see all statuses and can filter by ?status=. ' +
+      'Salon owners see their own salons in any status.',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated list of SalonResponseDto' })
+  findAll(
+    @Query() query: SalonQueryDto,
+    @CurrentUser() requester: JwtPayload,
+  ) {
+    return this.salonService.findAll(query, requester);
+  }
+
+  // ─── Public: single salon detail ──────────────────────────────────────────
+
+  @Public()
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get salon details',
+    description:
+      'Active salons are publicly readable. ' +
+      'Non-active salons are visible only to the owner, onboarding staff, or super admin.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 200, type: SalonResponseDto })
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<SalonResponseDto> {
+    return this.salonService.findOne(id, requester);
+  }
+
+  // ─── Create a salon ───────────────────────────────────────────────────────
+
+  /**
+   * POST /salons
+   * The authenticated user becomes the salon owner.
+   * Requires SALON_CREATE permission (granted to SALON_OWNER, SUPER_ADMIN).
+   */
+  @Post()
+  @RequirePermissions(Permission.SALON_CREATE)
+  @ApiOperation({
+    summary: 'Register a new salon',
+    description:
+      'Creates a salon in PENDING status assigned to the authenticated user. ' +
+      'An onboarding staff member must approve it before it goes ACTIVE.',
+  })
+  @ApiResponse({ status: 201, type: SalonResponseDto })
+  @ApiResponse({ status: 409, description: 'Slug conflict (name already taken)' })
+  create(
+    @Body() dto: CreateSalonDto,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<SalonResponseDto> {
+    return this.salonService.create(dto, requester);
+  }
+
+  // ─── Update salon ─────────────────────────────────────────────────────────
+
+  /**
+   * PATCH /salons/:id
+   * SALON_OWNER: can update their own salon.
+   * SUPER_ADMIN: can update any salon (SALON_UPDATE_ANY bypasses ownership).
+   * The service enforces ownership for non-admins.
+   */
+  @Patch(':id')
+  @RequirePermissions(Permission.SALON_UPDATE_OWN)
+  @ApiOperation({
+    summary: 'Update salon details',
+    description:
+      'SALON_OWNER can update their own salon. ' +
+      'SUPER_ADMIN can update any salon.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 200, type: SalonResponseDto })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSalonDto,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<SalonResponseDto> {
+    return this.salonService.update(id, dto, requester);
+  }
+
+  // ─── Approve ──────────────────────────────────────────────────────────────
+
+  /**
+   * PATCH /salons/:id/approve
+   * Sets status=ACTIVE, isVerified=true, records verifier.
+   * Only ONBOARDING_STAFF and SUPER_ADMIN can approve.
+   */
+  @Patch(':id/approve')
+  @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
+  @RequirePermissions(Permission.SALON_VERIFY)
+  @ApiOperation({
+    summary: 'Approve a pending salon registration',
+    description:
+      'Transitions salon from PENDING → ACTIVE. ' +
+      'Records the verifier and timestamp. ' +
+      'Requires ONBOARDING_STAFF or SUPER_ADMIN role.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 200, type: SalonResponseDto })
+  approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveSalonDto,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<SalonResponseDto> {
+    return this.salonService.approve(id, dto, requester);
+  }
+
+  // ─── Reject ───────────────────────────────────────────────────────────────
+
+  /**
+   * PATCH /salons/:id/reject
+   * Sets status=REJECTED, records the reason.
+   * Only ONBOARDING_STAFF and SUPER_ADMIN can reject.
+   */
+  @Patch(':id/reject')
+  @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
+  @RequirePermissions(Permission.SALON_VERIFY)
+  @ApiOperation({
+    summary: 'Reject a pending salon registration',
+    description:
+      'Transitions salon from PENDING → REJECTED. ' +
+      'The rejection reason is stored on the salon record.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 200, type: SalonResponseDto })
+  reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectSalonDto,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<SalonResponseDto> {
+    return this.salonService.reject(id, dto, requester);
+  }
+
+  // ─── Archive ──────────────────────────────────────────────────────────────
+
+  /**
+   * PATCH /salons/:id/archive
+   * Soft status transition → ARCHIVED.
+   * Owner can archive their own salon; SUPER_ADMIN can archive any.
+   */
+  @Patch(':id/archive')
+  @RequirePermissions(Permission.SALON_DELETE_OWN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Archive a salon (status → ARCHIVED)',
+    description:
+      'The salon record is preserved but the salon is no longer publicly listed. ' +
+      'Owner can archive their own; SUPER_ADMIN can archive any.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 204 })
+  archive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<void> {
+    return this.salonService.archive(id, requester);
+  }
+
+  // ─── Permanent soft-delete (SUPER_ADMIN only) ─────────────────────────────
+
+  /**
+   * DELETE /salons/:id
+   * Sets deletedAt — row is preserved but invisible to all queries.
+   * Restricted to SUPER_ADMIN.
+   */
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Soft-delete a salon (SUPER_ADMIN only)',
+    description:
+      'Sets deletedAt. The salon disappears from all queries but the row is retained. ' +
+      'Use archive for a reversible equivalent.',
+  })
+  @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiResponse({ status: 204 })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() requester: JwtPayload,
+  ): Promise<void> {
+    return this.salonService.remove(id, requester);
+  }
+}
