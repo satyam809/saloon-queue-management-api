@@ -17,6 +17,8 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
+    "typeRoots": ["./node_modules/@types"],
+    "types": [],
     "paths": {
       "@config/*": ["src/config/*"],
       "@common/*": ["src/common/*"],
