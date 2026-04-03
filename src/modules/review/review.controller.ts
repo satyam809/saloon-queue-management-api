@@ -12,9 +12,16 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReplyReviewDto } from './dto/reply-review.dto';
@@ -28,7 +35,7 @@ import { Permission } from '@common/enums/permission.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Reviews')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('reviews')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
@@ -45,7 +52,8 @@ export class ReviewController {
       'Supports ?salonId=, ?customerId=, ?barberId=, ?rating=, ?isVerifiedVisit=, ' +
       '?sortBy=, ?page=, ?limit=',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of ReviewResponseDto' })
+  @ApiPaginatedResponse(ReviewResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: ReviewQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -59,8 +67,8 @@ export class ReviewController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single review' })
   @ApiParam({ name: 'id', description: 'Review UUID' })
-  @ApiResponse({ status: 200, type: ReviewResponseDto })
-  @ApiResponse({ status: 404, description: 'Review not found' })
+  @ApiOkWrapped(ReviewResponseDto)
+  @ApiCommonErrors()
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -79,8 +87,9 @@ export class ReviewController {
       'Providing a queueEntryId or appointmentId marks the review as verified. ' +
       'One review per queue-visit / appointment is enforced.',
   })
-  @ApiResponse({ status: 201, type: ReviewResponseDto })
-  @ApiResponse({ status: 400, description: 'Duplicate review for this visit' })
+  @ApiCreatedWrapped(ReviewResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   create(
     @Body() dto: CreateReviewDto,
     @CurrentUser() requester: JwtPayload,
@@ -99,7 +108,8 @@ export class ReviewController {
       'Calling this endpoint again will overwrite an existing reply.',
   })
   @ApiParam({ name: 'id', description: 'Review UUID' })
-  @ApiResponse({ status: 200, type: ReviewResponseDto })
+  @ApiOkWrapped(ReviewResponseDto)
+  @ApiCommonErrors()
   reply(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplyReviewDto,
@@ -119,7 +129,8 @@ export class ReviewController {
       'Pass { "isPublished": false } to hide, true to restore.',
   })
   @ApiParam({ name: 'id', description: 'Review UUID' })
-  @ApiResponse({ status: 200, type: ReviewResponseDto })
+  @ApiOkWrapped(ReviewResponseDto)
+  @ApiCommonErrors()
   flag(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: FlagReviewDto,

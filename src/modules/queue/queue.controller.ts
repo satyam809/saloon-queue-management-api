@@ -12,12 +12,20 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOperation,
   ApiParam,
   ApiQuery,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkArrayWrapped,
+  ApiOkWrapped,
+} from '@common/swagger/decorators';
 import { QueueService } from './queue.service';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { JoinQueueDto } from './dto/join-queue.dto';
@@ -36,7 +44,7 @@ import { QueueStatus } from '@common/enums/status.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Queue')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('queues')
 export class QueueController {
   constructor(private readonly queueService: QueueService) {}
@@ -58,7 +66,7 @@ export class QueueController {
   })
   @ApiParam({ name: 'salonId', description: 'Salon UUID' })
   @ApiQuery({ name: 'date', example: '2026-03-30', required: true })
-  @ApiResponse({ status: 200, type: LiveQueueStateDto })
+  @ApiOkWrapped(LiveQueueStateDto)
   getLiveState(
     @Param('salonId', ParseUUIDPipe) salonId: string,
     @Query('date') date: string,
@@ -73,7 +81,8 @@ export class QueueController {
   @ApiOperation({ summary: 'Get queue record for a salon on a specific date' })
   @ApiParam({ name: 'salonId', description: 'Salon UUID' })
   @ApiQuery({ name: 'date', example: '2026-03-30', required: true })
-  @ApiResponse({ status: 200, type: QueueResponseDto })
+  @ApiOkWrapped(QueueResponseDto)
+  @ApiCommonErrors()
   findBySalon(
     @Param('salonId', ParseUUIDPipe) salonId: string,
     @Query('date') date: string,
@@ -96,8 +105,9 @@ export class QueueController {
       'One queue per salon per day. Calling this on an already-created-but-closed queue re-opens it. ' +
       'Requires QUEUE_CREATE permission (SALON_OWNER, STAFF, SUPER_ADMIN).',
   })
-  @ApiResponse({ status: 201, type: QueueResponseDto })
-  @ApiResponse({ status: 409, description: 'Queue already open for this date' })
+  @ApiCreatedWrapped(QueueResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   create(
     @Body() dto: CreateQueueDto,
     @CurrentUser() requester: JwtPayload,
@@ -117,7 +127,8 @@ export class QueueController {
       'SALON_OWNER or SUPER_ADMIN only.',
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
-  @ApiResponse({ status: 200, type: QueueResponseDto })
+  @ApiOkWrapped(QueueResponseDto)
+  @ApiCommonErrors()
   closeQueue(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -137,7 +148,8 @@ export class QueueController {
       'Clears the Redis sorted set.',
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Queue reset — all WAITING entries cancelled.' })
+  @ApiCommonErrors()
   forceReset(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
     return this.queueService.forceReset(id);
   }
@@ -158,9 +170,9 @@ export class QueueController {
       'Restricted to CUSTOMER role — staff cannot join the queues they manage.',
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
-  @ApiResponse({ status: 201, type: QueueEntryResponseDto })
-  @ApiResponse({ status: 400, description: 'Queue is closed or full' })
-  @ApiResponse({ status: 409, description: 'Customer already in this queue' })
+  @ApiCreatedWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   join(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: JoinQueueDto,
@@ -180,7 +192,8 @@ export class QueueController {
       'Returns 404 if the customer is not in this queue.',
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
-  @ApiResponse({ status: 200, type: UserPositionDto })
+  @ApiOkWrapped(UserPositionDto)
+  @ApiCommonErrors()
   getMyPosition(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('sub') userId: string,
@@ -205,7 +218,8 @@ export class QueueController {
       'Requires QUEUE_MANAGE permission (STAFF, SALON_OWNER, SUPER_ADMIN).',
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
-  @ApiResponse({ status: 200, type: QueueEntryResponseDto })
+  @ApiOkWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
   callNext(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -224,7 +238,8 @@ export class QueueController {
       'for the rolling average EWT.',
   })
   @ApiParam({ name: 'entryId', description: 'QueueEntry UUID' })
-  @ApiResponse({ status: 200, type: QueueEntryResponseDto })
+  @ApiOkWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
   startService(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @CurrentUser() requester: JwtPayload,
@@ -243,7 +258,8 @@ export class QueueController {
       'rolling average service duration in Redis.',
   })
   @ApiParam({ name: 'entryId', description: 'QueueEntry UUID' })
-  @ApiResponse({ status: 200, type: QueueEntryResponseDto })
+  @ApiOkWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
   complete(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @CurrentUser() requester: JwtPayload,
@@ -260,7 +276,8 @@ export class QueueController {
     description: 'Valid from CALLED or IN_PROGRESS status. Terminal state.',
   })
   @ApiParam({ name: 'entryId', description: 'QueueEntry UUID' })
-  @ApiResponse({ status: 200, type: QueueEntryResponseDto })
+  @ApiOkWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
   noShow(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @CurrentUser() requester: JwtPayload,
@@ -284,7 +301,8 @@ export class QueueController {
       'Removes the entry from the Redis sorted set so positions update instantly.',
   })
   @ApiParam({ name: 'entryId', description: 'QueueEntry UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Entry cancelled.' })
+  @ApiCommonErrors()
   cancel(
     @Param('entryId', ParseUUIDPipe) entryId: string,
     @Body() dto: CancelEntryDto,
@@ -303,7 +321,8 @@ export class QueueController {
   })
   @ApiParam({ name: 'id', description: 'Queue UUID' })
   @ApiQuery({ name: 'status', enum: QueueStatus, required: false })
-  @ApiResponse({ status: 200, type: [QueueEntryResponseDto] })
+  @ApiOkArrayWrapped(QueueEntryResponseDto)
+  @ApiCommonErrors()
   getEntries(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('status') status?: QueueStatus,

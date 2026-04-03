@@ -10,9 +10,10 @@ import {
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiNoContentResponse,
   ApiOperation,
-  ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -27,6 +28,13 @@ import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { LocalAuthGuard } from '@common/guards/local-auth.guard';
 import { JwtRefreshGuard } from '@common/guards/jwt-refresh.guard';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
+import { ErrorResponseDto } from '@common/dto/error-response.dto';
+import {
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkWrapped,
+} from '@common/swagger/decorators';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -41,8 +49,9 @@ export class AuthController {
     summary: 'Register a new customer account',
     description: 'Creates a new account with the CUSTOMER role and returns auth tokens.',
   })
-  @ApiResponse({ status: 201, type: AuthResponseDto })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
+  @ApiCreatedWrapped(AuthResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
     return this.authService.register(dto);
   }
@@ -56,11 +65,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login with email and password',
     description:
-      'Validates credentials via LocalStrategy. Returns an access token (short-lived) and a refresh token (long-lived).',
+      'Validates credentials via LocalStrategy. Returns an access token (short-lived) ' +
+      'and a refresh token (long-lived, single-use with rotation).',
   })
   @ApiBody({ type: LoginDto })
-  @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiResponse({ status: 401, description: 'Invalid email or password' })
+  @ApiOkWrapped(AuthResponseDto)
+  @ApiUnauthorizedResponse({ description: 'Invalid email or password', type: ErrorResponseDto })
   login(@Request() req: any): Promise<AuthResponseDto> {
     // req.user is set by LocalStrategy after successful credential validation
     return this.authService.login(req.user);
@@ -80,8 +90,11 @@ export class AuthController {
       'Reusing an already-rotated token is treated as a theft signal and invalidates all sessions.',
   })
   @ApiBody({ type: RefreshTokenDto })
-  @ApiResponse({ status: 200, type: TokensDto })
-  @ApiResponse({ status: 401, description: 'Invalid, expired, or already-used refresh token' })
+  @ApiOkWrapped(TokensDto)
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or already-used refresh token',
+    type: ErrorResponseDto,
+  })
   refresh(@Request() req: any): Promise<TokensDto> {
     // req.user is set by JwtRefreshStrategy and contains the JWT payload
     return this.authService.refresh(req.user);
@@ -89,7 +102,7 @@ export class AuthController {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
 
-  @ApiBearerAuth()
+  @ApiBearerAuth('bearer')
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
@@ -98,25 +111,25 @@ export class AuthController {
       'Deletes the stored refresh token from Redis. The access token remains valid ' +
       'until its natural expiry — clients must discard it locally.',
   })
-  @ApiResponse({ status: 204, description: 'Logged out successfully' })
+  @ApiNoContentResponse({ description: 'Logged out successfully.' })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid Bearer token', type: ErrorResponseDto })
   logout(@CurrentUser('sub') userId: string): Promise<void> {
     return this.authService.logout(userId);
   }
 
   // ─── Change password ──────────────────────────────────────────────────────
 
-  @ApiBearerAuth()
+  @ApiBearerAuth('bearer')
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary: 'Change password for the authenticated user',
     description:
       'Validates the current password, updates the hash, and revokes all active ' +
-      'sessions — user must log in again with the new password.',
+      'sessions — the user must log in again with the new password.',
   })
-  @ApiResponse({ status: 204, description: 'Password changed — all sessions revoked' })
-  @ApiResponse({ status: 400, description: 'Passwords do not match or same as current' })
-  @ApiResponse({ status: 401, description: 'Current password is incorrect' })
+  @ApiNoContentResponse({ description: 'Password changed — all sessions revoked.' })
+  @ApiCommonErrors()
   changePassword(
     @CurrentUser('sub') userId: string,
     @Body() dto: ChangePasswordDto,
@@ -135,7 +148,7 @@ export class AuthController {
       'Generates a one-time reset token (10-min TTL) and dispatches a reset email. ' +
       'Always returns 200 regardless of whether the email exists to prevent user enumeration.',
   })
-  @ApiResponse({ status: 200, type: MessageResponseDto })
+  @ApiOkWrapped(MessageResponseDto)
   async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<MessageResponseDto> {
     await this.authService.forgotPassword(dto);
     return {
@@ -155,8 +168,8 @@ export class AuthController {
       'Validates the one-time reset token (stored in Redis), updates the password hash, ' +
       'consumes the token, and revokes all active sessions.',
   })
-  @ApiResponse({ status: 204, description: 'Password reset successfully' })
-  @ApiResponse({ status: 400, description: 'Token invalid/expired or passwords do not match' })
+  @ApiNoContentResponse({ description: 'Password reset successfully.' })
+  @ApiCommonErrors()
   resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
     return this.authService.resetPassword(dto);
   }

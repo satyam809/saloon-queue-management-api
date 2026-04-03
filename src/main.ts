@@ -79,12 +79,60 @@ async function bootstrap() {
   if (isDev) {
     const config = new DocumentBuilder()
       .setTitle('Saloon Queue Management API')
-      .setDescription('Production-grade API for managing saloon queues')
+      .setDescription(
+        '## Overview\n' +
+        'REST API for managing salon queues, appointments, staff, and analytics.\n\n' +
+        '## Authentication\n' +
+        'All protected endpoints require a **Bearer token** in the `Authorization` header.\n' +
+        'Use `POST /api/v1/auth/login` to obtain tokens, then click **Authorize** above.\n\n' +
+        '## Response envelope\n' +
+        'Every response is wrapped by the transform interceptor:\n' +
+        '```json\n' +
+        '{ "success": true, "statusCode": 200, "data": { ... }, "timestamp": "..." }\n' +
+        '```\n' +
+        'Error responses include `requestId` for support correlation.',
+      )
       .setVersion('1.0')
-      .addBearerAuth()
+      // ── Auth scheme ──────────────────────────────────────────────────────
+      .addBearerAuth(
+        {
+          type:         'http',
+          scheme:       'bearer',
+          bearerFormat: 'JWT',
+          description:  'Paste the access token returned by POST /auth/login or POST /auth/refresh.',
+        },
+        'bearer',
+      )
+      // ── Servers ───────────────────────────────────────────────────────────
+      .addServer(`http://localhost:${configService.get<number>('app.port') ?? 3000}`, 'Local')
+      // ── Tag groups (order defines the sidebar order in Swagger UI) ────────
+      .addTag('Auth',          'Registration, login, token rotation, and password management.')
+      .addTag('Users',         'User accounts — profile, admin CRUD, and account status.')
+      .addTag('Salons',        'Salon registration, verification workflow, and management.')
+      .addTag('Barbers',       'Barber profiles, availability, and service assignments.')
+      .addTag('Services',      'Service catalog — pricing, duration, and barber assignments.')
+      .addTag('Queue',         'Daily queue lifecycle: open, join, call-next, complete, close.')
+      .addTag('Appointments',  'Scheduled appointments — booking, cancellation, and staff view.')
+      .addTag('Payments',      'Payment records, offline/online confirmation, and refunds.')
+      .addTag('Reviews',       'Customer reviews, owner replies, and moderation.')
+      .addTag('Notifications', 'In-app notification inbox — read, count, and delete.')
+      .addTag('Analytics',     'Revenue, customer trends, and salon performance reports.')
       .build();
+
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api/docs', app, document);
+
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,       // keep token after page refresh
+        docExpansion:         'none',     // collapse all groups on load
+        filter:               true,       // show the search box
+        tryItOutEnabled:      true,       // open "Try it out" by default
+        displayRequestDuration: true,     // show how long each request took
+        tagsSorter:           'original', // respect the order from addTag()
+        operationsSorter:     'method',   // GET → POST → PUT/PATCH → DELETE
+      },
+      customSiteTitle: 'Saloon API Docs',
+    });
   }
 
   // ─── Graceful shutdown ─────────────────────────────────────────────────────

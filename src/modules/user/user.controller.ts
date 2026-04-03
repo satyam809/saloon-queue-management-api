@@ -13,11 +13,19 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -33,7 +41,7 @@ import { Role } from '@common/enums/role.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Users')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('users')
 export class UserController {
   constructor(private readonly userService: UserService) {}
@@ -47,8 +55,9 @@ export class UserController {
    * No permission check needed — the route is scoped by the JWT sub claim.
    */
   @Get('me')
-  @ApiOperation({ summary: 'Get the authenticated user's own profile' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiOperation({ summary: 'Get the authenticated user\'s own profile' })
+  @ApiOkWrapped(UserResponseDto)
+  @ApiAuthErrors()
   getMe(@CurrentUser('sub') userId: string): Promise<UserResponseDto> {
     return this.userService.findMe(userId);
   }
@@ -65,7 +74,8 @@ export class UserController {
       'Users can only change name, phone, and avatarUrl. ' +
       'To change email or role, an admin must use PATCH /users/:id.',
   })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiOkWrapped(UserResponseDto)
+  @ApiCommonErrors()
   updateMe(
     @CurrentUser('sub') userId: string,
     @Body() dto: UpdateProfileDto,
@@ -87,10 +97,11 @@ export class UserController {
   @ApiOperation({
     summary: 'List users with search, filter, sort, and pagination',
     description:
-      'Results are scoped by the caller's role. ' +
+      'Results are scoped by the caller\'s role. ' +
       'Supports ?search=, ?role=, ?status=, ?sortBy=, ?sortOrder=, ?page=, ?limit=',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of UserResponseDto' })
+  @ApiPaginatedResponse(UserResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: UserQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -113,8 +124,9 @@ export class UserController {
       'Admins create accounts with specific roles. ' +
       'Only SUPER_ADMIN can assign SUPER_ADMIN role.',
   })
-  @ApiResponse({ status: 201, type: UserResponseDto })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
+  @ApiCreatedWrapped(UserResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   create(
     @Body() dto: CreateUserDto,
     @CurrentUser() requester: JwtPayload,
@@ -128,10 +140,11 @@ export class UserController {
   @RequirePermissions(Permission.USER_READ_ALL)
   @ApiOperation({
     summary: 'Get any user by ID (admin)',
-    description: 'Access is scoped by the caller's role (see service for visibility rules).',
+    description: 'Access is scoped by the caller\'s role (see service for visibility rules).',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiOkWrapped(UserResponseDto)
+  @ApiCommonErrors()
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -147,13 +160,14 @@ export class UserController {
   @Patch(':id')
   @RequirePermissions(Permission.USER_UPDATE_ANY)
   @ApiOperation({
-    summary: 'Admin: update any user's account fields',
+    summary: 'Admin: update any user\'s account fields',
     description:
       'Allows changing role, status, email, name, phone. ' +
       'Only SUPER_ADMIN can assign or modify SUPER_ADMIN accounts.',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiOkWrapped(UserResponseDto)
+  @ApiCommonErrors()
   adminUpdate(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AdminUpdateUserDto,
@@ -179,7 +193,8 @@ export class UserController {
       'User is locked out within 60 s (Redis cache TTL).',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Account suspended.' })
+  @ApiCommonErrors()
   suspend(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SuspendUserDto,
@@ -197,7 +212,8 @@ export class UserController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Activate (or re-activate) a user account' })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Account activated.' })
+  @ApiCommonErrors()
   activate(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -222,7 +238,8 @@ export class UserController {
       'Cannot delete your own account.',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'User deleted.' })
+  @ApiCommonErrors()
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,

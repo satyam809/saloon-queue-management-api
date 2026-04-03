@@ -12,11 +12,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
   constructor(private readonly logger: LoggerService) {}
 
   catch(exception: HttpException, host: ArgumentsHost) {
-    const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-    const status = exception.getStatus();
+    const ctx      = host.switchToHttp();
+    const res      = ctx.getResponse<Response>();
+    const req      = ctx.getRequest<Request & { requestId?: string; user?: { id?: string | number } }>();
+    const status   = exception.getStatus();
     const exceptionResponse = exception.getResponse();
+
+    const requestId = req.requestId ?? 'unknown';
+    const userId    = req.user?.id  ?? 'anon';
 
     const error =
       typeof exceptionResponse === 'string'
@@ -24,15 +27,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
         : (exceptionResponse as object);
 
     this.logger.warn(
-      `HTTP ${status} - ${request.method} ${request.url}`,
+      {
+        message:   `HTTP ${status} - ${req.method} ${req.url}`,
+        requestId,
+        userId,
+        ip:        req.ip,
+        userAgent: req.headers['user-agent'] ?? 'unknown',
+        statusCode: status,
+      },
       'HttpExceptionFilter',
     );
 
-    response.status(status).json({
-      success: false,
+    res.status(status).json({
+      success:    false,
       statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
+      requestId,
+      timestamp:  new Date().toISOString(),
+      path:       req.url,
       ...error,
     });
   }

@@ -14,9 +14,16 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiCreatedWrapped,
+  ApiOkArrayWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ConfirmOnlinePaymentDto } from './dto/confirm-online-payment.dto';
@@ -30,7 +37,7 @@ import { Permission } from '@common/enums/permission.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Payments')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('payments')
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
@@ -54,7 +61,8 @@ export class PaymentController {
       'Customers see only their own payments. ' +
       'Supports ?status=, ?paymentMethod=, ?from=, ?to=, ?sortBy=, ?page=, ?limit=',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of PaymentResponseDto' })
+  @ApiPaginatedResponse(PaymentResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: PaymentQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -71,7 +79,8 @@ export class PaymentController {
     description: 'Customers can only retrieve their own payments.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: PaymentResponseDto })
+  @ApiOkWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -98,7 +107,8 @@ export class PaymentController {
       'For online (gateway): supply transactionId, confirm via PATCH .../confirm-online. ' +
       'Idempotent on transactionId — duplicate gateway intents return the existing record.',
   })
-  @ApiResponse({ status: 201, type: PaymentResponseDto })
+  @ApiCreatedWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   create(
     @Body() dto: CreatePaymentDto,
     @CurrentUser() requester: JwtPayload,
@@ -122,7 +132,8 @@ export class PaymentController {
       'Uses a conditional UPDATE (WHERE status=pending) to prevent double-confirmation.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: PaymentResponseDto })
+  @ApiOkWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   confirmOffline(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -148,7 +159,8 @@ export class PaymentController {
       'Stores raw gatewayResponse for reconciliation.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: PaymentResponseDto })
+  @ApiOkWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   confirmOnline(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ConfirmOnlinePaymentDto,
@@ -171,7 +183,8 @@ export class PaymentController {
     description: 'Idempotent on already-FAILED payments. Stores failure reason and gateway payload.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: PaymentResponseDto })
+  @ApiOkWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   markFailed(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: FailPaymentDto,
@@ -194,7 +207,8 @@ export class PaymentController {
     description: 'Only PENDING payments can be cancelled. Terminal status payments are immutable.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: PaymentResponseDto })
+  @ApiOkWrapped(PaymentResponseDto)
+  @ApiCommonErrors()
   cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -223,7 +237,8 @@ export class PaymentController {
       'Concurrent refund requests are serialized via SELECT FOR UPDATE.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 201, type: PaymentRefundResponseDto })
+  @ApiCreatedWrapped(PaymentRefundResponseDto)
+  @ApiCommonErrors()
   refund(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RefundPaymentDto,
@@ -241,7 +256,8 @@ export class PaymentController {
     description: 'Returns refund events in reverse chronological order.',
   })
   @ApiParam({ name: 'id', description: 'Payment UUID' })
-  @ApiResponse({ status: 200, type: [PaymentRefundResponseDto] })
+  @ApiOkArrayWrapped(PaymentRefundResponseDto)
+  @ApiCommonErrors()
   findRefunds(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,

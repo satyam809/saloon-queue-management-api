@@ -13,11 +13,19 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { SalonService } from './salon.service';
 import { CreateSalonDto } from './dto/create-salon.dto';
 import { UpdateSalonDto } from './dto/update-salon.dto';
@@ -34,7 +42,7 @@ import { Role } from '@common/enums/role.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Salons')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('salons')
 export class SalonController {
   constructor(private readonly salonService: SalonService) {}
@@ -56,7 +64,8 @@ export class SalonController {
       'Admins and onboarding staff see all statuses and can filter by ?status=. ' +
       'Salon owners see their own salons in any status.',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of SalonResponseDto' })
+  @ApiPaginatedResponse(SalonResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: SalonQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -75,7 +84,8 @@ export class SalonController {
       'Non-active salons are visible only to the owner, onboarding staff, or super admin.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 200, type: SalonResponseDto })
+  @ApiOkWrapped(SalonResponseDto)
+  @ApiCommonErrors()
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -98,8 +108,9 @@ export class SalonController {
       'Creates a salon in PENDING status assigned to the authenticated user. ' +
       'An onboarding staff member must approve it before it goes ACTIVE.',
   })
-  @ApiResponse({ status: 201, type: SalonResponseDto })
-  @ApiResponse({ status: 409, description: 'Slug conflict (name already taken)' })
+  @ApiCreatedWrapped(SalonResponseDto)
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   create(
     @Body() dto: CreateSalonDto,
     @CurrentUser() requester: JwtPayload,
@@ -124,7 +135,8 @@ export class SalonController {
       'SUPER_ADMIN can update any salon.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 200, type: SalonResponseDto })
+  @ApiOkWrapped(SalonResponseDto)
+  @ApiCommonErrors()
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSalonDto,
@@ -151,7 +163,8 @@ export class SalonController {
       'Requires ONBOARDING_STAFF or SUPER_ADMIN role.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 200, type: SalonResponseDto })
+  @ApiOkWrapped(SalonResponseDto)
+  @ApiCommonErrors()
   approve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ApproveSalonDto,
@@ -177,7 +190,8 @@ export class SalonController {
       'The rejection reason is stored on the salon record.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 200, type: SalonResponseDto })
+  @ApiOkWrapped(SalonResponseDto)
+  @ApiCommonErrors()
   reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejectSalonDto,
@@ -203,7 +217,8 @@ export class SalonController {
       'Owner can archive their own; SUPER_ADMIN can archive any.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Salon archived.' })
+  @ApiCommonErrors()
   archive(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -228,7 +243,8 @@ export class SalonController {
       'Use archive for a reversible equivalent.',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Salon deleted.' })
+  @ApiCommonErrors()
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,

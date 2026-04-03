@@ -2,9 +2,9 @@ import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApiAuthErrors, ApiOkWrapped } from '@common/swagger/decorators';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { RevenueReportDto } from './dto/revenue-report.dto';
@@ -14,7 +14,7 @@ import { RequirePermissions } from '@common/decorators/require-permissions.decor
 import { Permission } from '@common/enums/permission.enum';
 
 @ApiTags('Analytics')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
@@ -34,7 +34,8 @@ export class AnalyticsController {
       'by time period, payment method, and service. Cached for 15 minutes. ' +
       'Provide ?salonId= to scope to a single salon.',
   })
-  @ApiResponse({ status: 200, type: RevenueReportDto })
+  @ApiOkWrapped(RevenueReportDto)
+  @ApiAuthErrors()
   getRevenue(@Query() query: AnalyticsQueryDto): Promise<RevenueReportDto> {
     return this.analyticsService.getRevenueReport(query);
   }
@@ -53,7 +54,8 @@ export class AnalyticsController {
       'published review rating, growth by period, and peak check-in hours. ' +
       'Cached for 15 minutes.',
   })
-  @ApiResponse({ status: 200, type: CustomerTrendsDto })
+  @ApiOkWrapped(CustomerTrendsDto)
+  @ApiAuthErrors()
   getCustomerTrends(@Query() query: AnalyticsQueryDto): Promise<CustomerTrendsDto> {
     return this.analyticsService.getCustomerTrends(query);
   }
@@ -73,7 +75,8 @@ export class AnalyticsController {
       'Barber performance and service popularity are included only when ?salonId= is provided. ' +
       'Cached for 15 minutes.',
   })
-  @ApiResponse({ status: 200, type: SalonPerformanceDto })
+  @ApiOkWrapped(SalonPerformanceDto)
+  @ApiAuthErrors()
   getPerformance(@Query() query: AnalyticsQueryDto): Promise<SalonPerformanceDto> {
     return this.analyticsService.getSalonPerformance(query);
   }

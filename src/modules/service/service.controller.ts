@@ -13,11 +13,21 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiConflictErrors,
+  ApiCreatedWrapped,
+  ApiOkArrayWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { ServiceService } from './service.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -31,7 +41,7 @@ import { Permission } from '@common/enums/permission.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Services')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('services')
 export class ServiceController {
   constructor(private readonly serviceService: ServiceService) {}
@@ -47,7 +57,8 @@ export class ServiceController {
       'Owners and staff see all (including inactive). ' +
       'Supports ?salonId=, ?search=, ?category=, ?isActive=, ?sortBy=, ?page=, ?limit=',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of ServiceResponseDto' })
+  @ApiPaginatedResponse(ServiceResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: ServiceQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -61,7 +72,8 @@ export class ServiceController {
   @Get(':id')
   @ApiOperation({ summary: 'Get service details' })
   @ApiParam({ name: 'id', description: 'Service UUID' })
-  @ApiResponse({ status: 200, type: ServiceResponseDto })
+  @ApiOkWrapped(ServiceResponseDto)
+  @ApiCommonErrors()
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ServiceResponseDto> {
     return this.serviceService.findOne(id);
   }
@@ -76,7 +88,8 @@ export class ServiceController {
       'Adds a new service to the salon's catalog. ' +
       'Requires SERVICE_CREATE permission (SALON_OWNER, SUPER_ADMIN).',
   })
-  @ApiResponse({ status: 201, type: ServiceResponseDto })
+  @ApiCreatedWrapped(ServiceResponseDto)
+  @ApiCommonErrors()
   create(
     @Body() dto: CreateServiceDto,
     @CurrentUser() requester: JwtPayload,
@@ -93,7 +106,8 @@ export class ServiceController {
     description: 'SALON_OWNER can update services in their salon. SUPER_ADMIN can update any.',
   })
   @ApiParam({ name: 'id', description: 'Service UUID' })
-  @ApiResponse({ status: 200, type: ServiceResponseDto })
+  @ApiOkWrapped(ServiceResponseDto)
+  @ApiCommonErrors()
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceDto,
@@ -112,7 +126,8 @@ export class ServiceController {
     description: 'Sets deletedAt. Existing appointments referencing this service are preserved.',
   })
   @ApiParam({ name: 'id', description: 'Service UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Service deleted.' })
+  @ApiCommonErrors()
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
@@ -136,8 +151,9 @@ export class ServiceController {
       'Returns 409 if the barber is already assigned.',
   })
   @ApiParam({ name: 'id', description: 'Service UUID' })
-  @ApiResponse({ status: 204 })
-  @ApiResponse({ status: 409, description: 'Barber already assigned to this service' })
+  @ApiNoContentResponse({ description: 'Barber assigned.' })
+  @ApiCommonErrors()
+  @ApiConflictErrors()
   assignBarber(
     @Param('id', ParseUUIDPipe) serviceId: string,
     @Body() dto: AssignBarberDto,
@@ -159,7 +175,8 @@ export class ServiceController {
   })
   @ApiParam({ name: 'id', description: 'Service UUID' })
   @ApiParam({ name: 'barberId', description: 'Barber UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Barber assignment removed.' })
+  @ApiCommonErrors()
   removeBarber(
     @Param('id', ParseUUIDPipe) serviceId: string,
     @Param('barberId', ParseUUIDPipe) barberId: string,
@@ -179,7 +196,7 @@ export class ServiceController {
     description: 'Returns barber↔service pivot rows including any per-barber overrides.',
   })
   @ApiParam({ name: 'id', description: 'Service UUID' })
-  @ApiResponse({ status: 200, description: 'Array of BarberService assignment records' })
+  @ApiOkResponse({ description: 'Array of barber–service assignment records with any per-barber price/duration overrides.' })
   findBarbers(@Param('id', ParseUUIDPipe) serviceId: string) {
     return this.serviceService.findBarbers(serviceId);
   }

@@ -13,11 +13,18 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiNoContentResponse,
   ApiOperation,
   ApiParam,
-  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import {
+  ApiAuthErrors,
+  ApiCommonErrors,
+  ApiCreatedWrapped,
+  ApiOkWrapped,
+  ApiPaginatedResponse,
+} from '@common/swagger/decorators';
 import { BarberService } from './barber.service';
 import { CreateBarberDto } from './dto/create-barber.dto';
 import { UpdateBarberDto } from './dto/update-barber.dto';
@@ -31,7 +38,7 @@ import { Permission } from '@common/enums/permission.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
 @ApiTags('Barbers')
-@ApiBearerAuth()
+@ApiBearerAuth('bearer')
 @Controller('barbers')
 export class BarberController {
   constructor(private readonly barberService: BarberService) {}
@@ -47,7 +54,8 @@ export class BarberController {
       'Staff and owners see all statuses for their salon. ' +
       'Supports ?salonId=, ?search=, ?isAvailable=, ?status=, ?sortBy=, ?page=, ?limit=',
   })
-  @ApiResponse({ status: 200, description: 'Paginated list of BarberResponseDto' })
+  @ApiPaginatedResponse(BarberResponseDto)
+  @ApiAuthErrors()
   findAll(
     @Query() query: BarberQueryDto,
     @CurrentUser() requester: JwtPayload,
@@ -61,7 +69,8 @@ export class BarberController {
   @Get(':id')
   @ApiOperation({ summary: 'Get barber details' })
   @ApiParam({ name: 'id', description: 'Barber UUID' })
-  @ApiResponse({ status: 200, type: BarberResponseDto })
+  @ApiOkWrapped(BarberResponseDto)
+  @ApiCommonErrors()
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<BarberResponseDto> {
     return this.barberService.findOne(id);
   }
@@ -76,7 +85,8 @@ export class BarberController {
       'Creates a new barber profile. The barber may optionally be linked to an existing user account. ' +
       'Requires BARBER_CREATE permission (SALON_OWNER, SUPER_ADMIN).',
   })
-  @ApiResponse({ status: 201, type: BarberResponseDto })
+  @ApiCreatedWrapped(BarberResponseDto)
+  @ApiCommonErrors()
   create(
     @Body() dto: CreateBarberDto,
     @CurrentUser() requester: JwtPayload,
@@ -95,7 +105,8 @@ export class BarberController {
       'SUPER_ADMIN can update any barber.',
   })
   @ApiParam({ name: 'id', description: 'Barber UUID' })
-  @ApiResponse({ status: 200, type: BarberResponseDto })
+  @ApiOkWrapped(BarberResponseDto)
+  @ApiCommonErrors()
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBarberDto,
@@ -120,7 +131,8 @@ export class BarberController {
       'STAFF, SALON_OWNER, SUPER_ADMIN, or the barber's own linked user account can call this.',
   })
   @ApiParam({ name: 'id', description: 'Barber UUID' })
-  @ApiResponse({ status: 200, type: BarberResponseDto })
+  @ApiOkWrapped(BarberResponseDto)
+  @ApiCommonErrors()
   setAvailability(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetAvailabilityDto,
@@ -140,7 +152,8 @@ export class BarberController {
       'Sets deletedAt. Preserves historical queue / appointment data.',
   })
   @ApiParam({ name: 'id', description: 'Barber UUID' })
-  @ApiResponse({ status: 204 })
+  @ApiNoContentResponse({ description: 'Barber deleted.' })
+  @ApiCommonErrors()
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() requester: JwtPayload,
