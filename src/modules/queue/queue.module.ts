@@ -7,7 +7,10 @@ import { QueueController } from './queue.controller';
 import { SalonModule } from '@modules/salon/salon.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Queue, QueueEntry]), SalonModule],
+  imports: [
+    TypeOrmModule.forFeature([Queue, QueueEntry]),
+    SalonModule,   // SalonService.findEntityOrFail — capacity + avg duration
+  ],
   controllers: [QueueController],
   providers: [QueueService],
   exports: [QueueService],

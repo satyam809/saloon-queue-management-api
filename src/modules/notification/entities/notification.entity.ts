@@ -6,7 +6,7 @@ import {
   Index,
 } from 'typeorm';
 import { BaseEntity } from '@database/base.entity';
-import { NotificationType, NotificationChannel } from '@common/enums/notification.enum';
+import { NotificationType, NotificationChannel, NotificationPriority } from '@common/enums/notification.enum';
 import type { User } from '@modules/user/entities/user.entity';
 
 /**
@@ -60,4 +60,20 @@ export class Notification extends BaseEntity {
    */
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any> | null;
+
+  @Column({ type: 'enum', enum: NotificationPriority, default: NotificationPriority.NORMAL })
+  priority: NotificationPriority;
+
+  /**
+   * Type of the entity this notification relates to.
+   * Used for deep-linking and grouping. E.g. 'queue_entry', 'appointment', 'payment'.
+   */
+  @Column({ length: 80, nullable: true })
+  relatedEntityType: string | null;
+
+  /**
+   * UUID of the related entity. Not a FK — entity may be soft-deleted.
+   */
+  @Column({ type: 'char', length: 36, nullable: true })
+  relatedEntityId: string | null;
 }

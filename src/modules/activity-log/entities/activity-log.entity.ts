@@ -8,6 +8,7 @@ import {
   Index,
 } from 'typeorm';
 import type { User } from '@modules/user/entities/user.entity';
+import type { Role } from '@common/enums/role.enum';
 
 /**
  * Immutable audit trail for every state-changing operation.
@@ -34,6 +35,7 @@ import type { User } from '@modules/user/entities/user.entity';
 @Index(['entityType', 'entityId'])       // full audit trail for one record
 @Index(['userId'])
 @Index(['action'])
+@Index(['category'])
 @Index(['createdAt'])                    // time-range queries / retention purge
 export class ActivityLog {
 
@@ -45,6 +47,13 @@ export class ActivityLog {
    */
   @Column({ nullable: true })
   userId: string | null;
+
+  /**
+   * Role of the actor at the time of the action.
+   * NULL for system/scheduled jobs.
+   */
+  @Column({ nullable: true, length: 20 })
+  actorRole: Role | null;
 
   @ManyToOne('User', (user: User) => user.activityLogs, {
     nullable: true,
@@ -60,6 +69,13 @@ export class ActivityLog {
    */
   @Column({ length: 100 })
   action: string;
+
+  /**
+   * Top-level category grouping for efficient filtering.
+   * Values: 'queue', 'payment', 'barber', 'service', 'review', 'user', 'salon', 'appointment'
+   */
+  @Column({ length: 50 })
+  category: string;
 
   /**
    * Name of the affected entity type (matches table name without pluralisation).
@@ -88,6 +104,13 @@ export class ActivityLog {
    */
   @Column({ type: 'json', nullable: true })
   newValues: Record<string, any> | null;
+
+  /**
+   * Arbitrary context beyond state diffs.
+   * Examples: { reason: '...', tokenNumber: 7 }
+   */
+  @Column({ type: 'json', nullable: true })
+  metadata: Record<string, any> | null;
 
   /**
    * Supports IPv6 (max 45 chars).

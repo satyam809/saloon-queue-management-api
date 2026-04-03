@@ -389,19 +389,27 @@ CREATE INDEX idx_appt_deleted_at        ON appointments (deleted_at);
 -- =============================================================================
 -- 10. PAYMENTS
 -- Linked to either a queue_entry or an appointment (at least one must be set).
--- Supports partial refunds.
+-- Supports partial refunds via the payment_refunds child table.
+--
+-- Amount invariant (enforced in service layer):
+--   total_amount = subtotal_amount - discount_amount + tax_amount
+--
+-- Refund invariant (enforced via SELECT FOR UPDATE in PaymentService.refund):
+--   refunded_amount <= total_amount
 -- =============================================================================
 CREATE TABLE payments (
   id                    CHAR(36)        NOT NULL,
+  payment_number        VARCHAR(30)     NOT NULL,                  -- PAY-20260330-00042
   salon_id              CHAR(36)        NOT NULL,
   customer_id           CHAR(36)        NOT NULL,
   queue_entry_id        CHAR(36)        NULL,
   appointment_id        CHAR(36)        NULL,
-  -- Amounts (all in smallest currency unit strategy but stored as DECIMAL for readability)
+  -- Amount breakdown
   subtotal_amount       DECIMAL(10,2)   NOT NULL,
   discount_amount       DECIMAL(10,2)   NOT NULL DEFAULT 0.00,
   tax_amount            DECIMAL(10,2)   NOT NULL DEFAULT 0.00,
-  total_amount          DECIMAL(10,2)   NOT NULL,
+  total_amount          DECIMAL(10,2)   NOT NULL,                  -- subtotal - discount + tax
+  refunded_amount       DECIMAL(10,2)   NOT NULL DEFAULT 0.00,     -- sum of payment_refunds.amount
   currency              CHAR(3)         NOT NULL DEFAULT 'USD',
   -- Payment method & gateway
   payment_method        ENUM(
@@ -410,41 +418,79 @@ CREATE TABLE payments (
                           'online',
                           'wallet'
                         )               NOT NULL DEFAULT 'cash',
+  provider              ENUM(
+                          'manual',
+                          'stripe',
+                          'paypal',
+                          'square'
+                        )               NOT NULL DEFAULT 'manual',
   status                ENUM(
                           'pending',
                           'completed',
                           'failed',
                           'refunded',
-                          'partially_refunded'
+                          'partially_refunded',
+                          'cancelled'
                         )               NOT NULL DEFAULT 'pending',
-  transaction_id        VARCHAR(255)    NULL,                     -- gateway txn ref
-  gateway_response      JSON            NULL,                     -- raw gateway payload
-  -- Refunds
-  refunded_amount       DECIMAL(10,2)   NOT NULL DEFAULT 0.00,
-  refund_reason         VARCHAR(255)    NULL,
+  transaction_id        VARCHAR(255)    NULL,                      -- gateway intent / charge ID
+  gateway_response      JSON            NULL,                      -- raw gateway payload (never exposed to clients)
+  failure_reason        TEXT            NULL,                      -- populated on status=failed
+  notes                 TEXT            NULL,                      -- internal staff notes
   -- Lifecycle timestamps
   paid_at               DATETIME        NULL,
-  refunded_at           DATETIME        NULL,
+  cancelled_at          DATETIME        NULL,
   -- Audit fields
   created_at            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at            DATETIME        NULL,
 
   CONSTRAINT pk_payments                PRIMARY KEY (id),
+  CONSTRAINT uq_payments_number         UNIQUE (payment_number),
   CONSTRAINT fk_payments_salon          FOREIGN KEY (salon_id)        REFERENCES salons        (id),
   CONSTRAINT fk_payments_customer       FOREIGN KEY (customer_id)     REFERENCES users         (id),
   CONSTRAINT fk_payments_queue_entry    FOREIGN KEY (queue_entry_id)  REFERENCES queue_entries (id),
-  CONSTRAINT fk_payments_appointment    FOREIGN KEY (appointment_id)  REFERENCES appointments  (id)
+  CONSTRAINT fk_payments_appointment    FOREIGN KEY (appointment_id)  REFERENCES appointments  (id),
+  -- At least one source must be set (belt-and-suspenders; enforced in service too)
+  CONSTRAINT chk_payments_source        CHECK (queue_entry_id IS NOT NULL OR appointment_id IS NOT NULL)
 );
 
-CREATE INDEX idx_payments_salon_id        ON payments (salon_id);
-CREATE INDEX idx_payments_customer_id     ON payments (customer_id);
-CREATE INDEX idx_payments_queue_entry_id  ON payments (queue_entry_id);
-CREATE INDEX idx_payments_appointment_id  ON payments (appointment_id);
-CREATE INDEX idx_payments_status          ON payments (status);
-CREATE INDEX idx_payments_paid_at         ON payments (paid_at);
-CREATE INDEX idx_payments_transaction_id  ON payments (transaction_id);
-CREATE INDEX idx_payments_deleted_at      ON payments (deleted_at);
+CREATE UNIQUE INDEX idx_payments_number          ON payments (payment_number);
+CREATE INDEX idx_payments_salon_status           ON payments (salon_id, status);
+CREATE INDEX idx_payments_salon_paid_at          ON payments (salon_id, paid_at);
+CREATE INDEX idx_payments_customer_status        ON payments (customer_id, status);
+CREATE INDEX idx_payments_queue_entry_id         ON payments (queue_entry_id);
+CREATE INDEX idx_payments_appointment_id         ON payments (appointment_id);
+CREATE UNIQUE INDEX idx_payments_transaction_id  ON payments (transaction_id);  -- idempotency key
+CREATE INDEX idx_payments_deleted_at             ON payments (deleted_at);
+
+
+-- =============================================================================
+-- 10a. PAYMENT_REFUNDS
+-- One row per refund event. Supports multiple partial refunds on a single payment.
+-- No soft-delete: refund records are permanent ledger entries.
+-- =============================================================================
+CREATE TABLE payment_refunds (
+  id                    CHAR(36)        NOT NULL,
+  payment_id            CHAR(36)        NOT NULL,
+  refunded_by_id        CHAR(36)        NOT NULL,                  -- staff member who issued the refund
+  amount                DECIMAL(10,2)   NOT NULL,                  -- > 0, <= (total - already refunded)
+  reason                TEXT            NOT NULL,
+  transaction_id        VARCHAR(255)    NULL,                      -- gateway refund ID
+  gateway_response      JSON            NULL,
+  refunded_at           DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Audit fields
+  created_at            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  CONSTRAINT pk_payment_refunds             PRIMARY KEY (id),
+  CONSTRAINT fk_payment_refunds_payment     FOREIGN KEY (payment_id)     REFERENCES payments (id) ON DELETE CASCADE,
+  CONSTRAINT fk_payment_refunds_refunded_by FOREIGN KEY (refunded_by_id) REFERENCES users    (id),
+  CONSTRAINT chk_refund_amount_positive     CHECK (amount > 0)
+);
+
+CREATE INDEX idx_refunds_payment_id   ON payment_refunds (payment_id);
+CREATE INDEX idx_refunds_refunded_at  ON payment_refunds (refunded_at);
+CREATE INDEX idx_refunds_staff        ON payment_refunds (refunded_by_id);
 
 
 -- =============================================================================
@@ -548,11 +594,14 @@ CREATE INDEX idx_notifs_created_at      ON notifications (created_at);
 CREATE TABLE activity_logs (
   id            CHAR(36)        NOT NULL,
   user_id       CHAR(36)        NULL,                             -- NULL = system/scheduled job
+  actor_role    VARCHAR(20)     NULL,                             -- role at time of action
   action        VARCHAR(100)    NOT NULL,                         -- 'queue.entry.cancelled', 'salon.updated'
+  category      VARCHAR(50)     NOT NULL,                         -- 'queue', 'payment', 'barber', 'service', 'review', 'user', 'salon', 'appointment'
   entity_type   VARCHAR(80)     NOT NULL,                         -- 'queue_entry', 'salon', 'user'
   entity_id     CHAR(36)        NOT NULL,
   old_values    JSON            NULL,                             -- state before change
   new_values    JSON            NULL,                             -- state after change
+  metadata      JSON            NULL,                             -- arbitrary context beyond state diffs
   ip_address    VARCHAR(45)     NULL,                             -- supports IPv6
   user_agent    VARCHAR(500)    NULL,
   created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -564,7 +613,185 @@ CREATE TABLE activity_logs (
 CREATE INDEX idx_logs_user_id     ON activity_logs (user_id);
 CREATE INDEX idx_logs_entity      ON activity_logs (entity_type, entity_id);    -- audit trail per record
 CREATE INDEX idx_logs_action      ON activity_logs (action);
+CREATE INDEX idx_logs_category    ON activity_logs (category);
 CREATE INDEX idx_logs_created_at  ON activity_logs (created_at);                -- time-range queries
 
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+
+-- =============================================================================
+-- PERFORMANCE INDEXES
+-- Run once via migration.  All statements use IF NOT EXISTS so they are
+-- idempotent and safe to re-run.
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- queue_entries: generated date column + index
+-- ---------------------------------------------------------------------------
+-- The analytics queries filter on DATE(checked_in_at) BETWEEN ? AND ?.
+-- Wrapping a column in DATE() makes the expression non-sargable, causing full
+-- index scans.  A STORED generated column exposes the date part as a plain
+-- column so a regular B-tree index can satisfy the range predicate in O(log N).
+--
+-- NOTE: ALTER TABLE acquires a metadata lock.  Run during a low-traffic window
+-- or via pt-online-schema-change on large tables.
+
+ALTER TABLE queue_entries
+  ADD COLUMN IF NOT EXISTS checked_in_date DATE
+    GENERATED ALWAYS AS (DATE(checked_in_at)) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_qe_checked_in_date
+  ON queue_entries (checked_in_date);
+
+-- Covering index for the per-day performance analytics query.
+-- Satisfies: queue_id filter + status filter + all TIMESTAMPDIFF columns.
+-- Avoids the row heap lookup for every matched entry in the aggregation.
+CREATE INDEX IF NOT EXISTS idx_qe_analytics
+  ON queue_entries (queue_id, status, checked_in_date,
+                    checked_in_at, called_at, service_started_at, completed_at);
+
+-- ---------------------------------------------------------------------------
+-- payments: covering index for analytics revenue queries
+-- ---------------------------------------------------------------------------
+-- Analytics queries pattern:
+--   WHERE salon_id = ?
+--     AND status IN ('completed','refunded','partially_refunded')
+--     AND paid_at BETWEEN ? AND ?
+-- Existing separate indexes on (salon_id, status) and (salon_id, paid_at) force
+-- MySQL to pick one and filter the other in memory.  A triple composite is
+-- unambiguously better for this access pattern.
+-- Including total_amount and refunded_amount avoids the heap lookup for SUM().
+CREATE INDEX IF NOT EXISTS idx_payments_analytics
+  ON payments (salon_id, status, paid_at, total_amount, refunded_amount);
+
+-- ---------------------------------------------------------------------------
+-- reviews: covering index for analytics rating queries
+-- ---------------------------------------------------------------------------
+-- Analytics pattern:
+--   WHERE salon_id = ?
+--     AND is_published = 1
+--     AND deleted_at IS NULL
+--     AND created_at BETWEEN ? AND ?
+-- The existing (is_published, salon_id) index covers the boolean + salon filter
+-- but not the date range, causing a full-index scan for the date filter.
+CREATE INDEX IF NOT EXISTS idx_reviews_analytics
+  ON reviews (salon_id, is_published, deleted_at, created_at, rating);
+
+-- ---------------------------------------------------------------------------
+-- appointments: covering index for the barber conflict-detection hot path
+-- ---------------------------------------------------------------------------
+-- The existing idx_appt_conflict_check already covers (barber_id, scheduled_at,
+-- ends_at, status); no change needed there.
+-- Add a date-only index for appointment analytics (date range scans).
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS scheduled_date DATE
+    GENERATED ALWAYS AS (DATE(scheduled_at)) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_appt_scheduled_date
+  ON appointments (scheduled_date);
+
+-- ---------------------------------------------------------------------------
+-- activity_logs: composite for the most common audit-trail query
+-- ---------------------------------------------------------------------------
+-- Typical query: WHERE category = ? AND created_at BETWEEN ? AND ?
+-- The separate indexes on category and created_at each satisfy only part of
+-- the predicate.  A composite uses the category equality + date range together.
+CREATE INDEX IF NOT EXISTS idx_logs_category_date
+  ON activity_logs (category, created_at);
+
+-- =============================================================================
+-- NOTIFICATION MODULE ENHANCEMENTS
+-- Run once against an existing schema (idempotent via IF NOT EXISTS / IGNORE).
+-- =============================================================================
+
+-- 14. Extend notifications with priority + related-entity columns
+
+ALTER TABLE notifications
+  ADD COLUMN IF NOT EXISTS priority              ENUM('low','normal','urgent') NOT NULL DEFAULT 'normal'
+    AFTER metadata,
+  ADD COLUMN IF NOT EXISTS related_entity_type   VARCHAR(80) NULL
+    AFTER priority,
+  ADD COLUMN IF NOT EXISTS related_entity_id     CHAR(36)    NULL
+    AFTER related_entity_type;
+
+CREATE INDEX IF NOT EXISTS idx_notifs_related ON notifications (related_entity_type, related_entity_id);
+CREATE INDEX IF NOT EXISTS idx_notifs_priority ON notifications (priority);
+
+
+-- =============================================================================
+-- 14a. NOTIFICATION_TEMPLATES
+-- One row per (type × channel). Stores title + body mustache templates.
+-- Seeded automatically by NotificationTemplateService.onModuleInit().
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS notification_templates (
+  id              CHAR(36)        NOT NULL,
+  type            ENUM(
+                    'queue_called',
+                    'queue_joined',
+                    'appointment_confirmed',
+                    'appointment_reminder',
+                    'appointment_cancelled',
+                    'payment_received',
+                    'payment_refunded',
+                    'review_reply',
+                    'general'
+                  )               NOT NULL,
+  channel         ENUM(
+                    'in_app',
+                    'email',
+                    'sms',
+                    'push'
+                  )               NOT NULL,
+  title_template  VARCHAR(250)    NOT NULL,
+  body_template   TEXT            NOT NULL,
+  is_active       TINYINT(1)      NOT NULL DEFAULT 1,
+  -- Audit fields
+  created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at      DATETIME        NULL,
+
+  CONSTRAINT pk_notification_templates           PRIMARY KEY (id),
+  CONSTRAINT uq_notification_templates_type_chan UNIQUE (type, channel)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_tpl_type_chan ON notification_templates (type, channel);
+
+
+-- =============================================================================
+-- 14b. NOTIFICATION_PREFERENCES
+-- Per-user opt-in/opt-out for each (type × channel) combination.
+-- Absence of a row means the user receives that notification (opt-out model).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  id          CHAR(36)        NOT NULL,
+  user_id     CHAR(36)        NOT NULL,
+  type        ENUM(
+                'queue_called',
+                'queue_joined',
+                'appointment_confirmed',
+                'appointment_reminder',
+                'appointment_cancelled',
+                'payment_received',
+                'payment_refunded',
+                'review_reply',
+                'general'
+              )               NOT NULL,
+  channel     ENUM(
+                'in_app',
+                'email',
+                'sms',
+                'push'
+              )               NOT NULL,
+  is_enabled  TINYINT(1)      NOT NULL DEFAULT 1,
+  -- Audit fields
+  created_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at  DATETIME        NULL,
+
+  CONSTRAINT pk_notification_prefs               PRIMARY KEY (id),
+  CONSTRAINT uq_notification_prefs_user_type_chan UNIQUE (user_id, type, channel),
+  CONSTRAINT fk_notification_prefs_user          FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_notif_prefs_user_id ON notification_preferences (user_id);

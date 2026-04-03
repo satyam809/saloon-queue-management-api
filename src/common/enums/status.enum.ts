@@ -64,16 +64,25 @@ export enum AppointmentStatus {
 // ─── Payment ─────────────────────────────────────────────────────────────────
 
 export enum PaymentMethod {
-  CASH = 'cash',
-  CARD = 'card',
-  ONLINE = 'online',
-  WALLET = 'wallet',
+  CASH   = 'cash',
+  CARD   = 'card',      // POS terminal (offline) or online card
+  ONLINE = 'online',    // payment gateway (Stripe, PayPal, etc.)
+  WALLET = 'wallet',    // in-app wallet
+}
+
+/** Which gateway processed (or will process) this payment. */
+export enum PaymentProvider {
+  MANUAL  = 'manual',   // offline — cash or POS terminal
+  STRIPE  = 'stripe',
+  PAYPAL  = 'paypal',
+  SQUARE  = 'square',
 }
 
 export enum PaymentStatus {
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  REFUNDED = 'refunded',
-  PARTIALLY_REFUNDED = 'partially_refunded',
+  PENDING             = 'pending',
+  COMPLETED           = 'completed',
+  FAILED              = 'failed',
+  REFUNDED            = 'refunded',
+  PARTIALLY_REFUNDED  = 'partially_refunded',
+  CANCELLED           = 'cancelled',
 }
