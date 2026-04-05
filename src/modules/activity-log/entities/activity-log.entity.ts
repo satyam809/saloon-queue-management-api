@@ -45,14 +45,14 @@ export class ActivityLog {
   /**
    * NULL when triggered by a system job or scheduled task (no authenticated user).
    */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   userId: string | null;
 
   /**
    * Role of the actor at the time of the action.
    * NULL for system/scheduled jobs.
    */
-  @Column({ nullable: true, length: 20 })
+  @Column({ type: 'varchar', nullable: true, length: 20 })
   actorRole: Role | null;
 
   @ManyToOne('User', (user: User) => user.activityLogs, {
@@ -67,21 +67,21 @@ export class ActivityLog {
    * Convention: <entity>.<sub-entity?>.<verb>
    * Examples: 'salon.verified', 'queue.entry.cancelled', 'user.suspended'
    */
-  @Column({ length: 100 })
+  @Column({ type: 'varchar', length: 100 })
   action: string;
 
   /**
    * Top-level category grouping for efficient filtering.
    * Values: 'queue', 'payment', 'barber', 'service', 'review', 'user', 'salon', 'appointment'
    */
-  @Column({ length: 50 })
+  @Column({ type: 'varchar', length: 50 })
   category: string;
 
   /**
    * Name of the affected entity type (matches table name without pluralisation).
    * Examples: 'salon', 'queue_entry', 'appointment'
    */
-  @Column({ length: 80 })
+  @Column({ type: 'varchar', length: 80 })
   entityType: string;
 
   /**
@@ -115,10 +115,10 @@ export class ActivityLog {
   /**
    * Supports IPv6 (max 45 chars).
    */
-  @Column({ nullable: true, length: 45 })
+  @Column({ type: 'varchar', nullable: true, length: 45 })
   ipAddress: string | null;
 
-  @Column({ nullable: true, length: 500 })
+  @Column({ type: 'varchar', nullable: true, length: 500 })
   userAgent: string | null;
 
   @CreateDateColumn({ type: 'datetime' })

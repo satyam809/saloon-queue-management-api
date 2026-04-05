@@ -15,7 +15,7 @@ import type { User } from '@modules/user/entities/user.entity';
 export class Staff extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.staff)
@@ -27,20 +27,20 @@ export class Staff extends BaseEntity {
    * When present, login is handled via the users table.
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   userId: string | null;
 
   @ManyToOne('User', (user: User) => user.staffProfiles, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
-  @Column({ length: 100 })
+  @Column({ type: 'varchar', length: 100 })
   name: string;
 
-  @Column({ nullable: true, length: 150 })
+  @Column({ type: 'varchar', nullable: true, length: 150 })
   email: string | null;
 
-  @Column({ nullable: true, length: 20 })
+  @Column({ type: 'varchar', nullable: true, length: 20 })
   phone: string | null;
 
   @Column({ type: 'enum', enum: StaffRole, default: StaffRole.STAFF })
@@ -50,7 +50,7 @@ export class Staff extends BaseEntity {
   @Column({ type: 'enum', enum: StaffStatus, default: StaffStatus.ACTIVE })
   status: StaffStatus;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   avatarUrl: string | null;
 
   @Column({ type: 'date', nullable: true })

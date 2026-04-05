@@ -17,20 +17,20 @@ import type { Appointment } from '@modules/appointment/entities/appointment.enti
 export class Service extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.services)
   @JoinColumn({ name: 'salon_id' })
   salon: Salon;
 
-  @Column({ length: 150 })
+  @Column({ type: 'varchar', length: 150 })
   name: string;
 
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ nullable: true, length: 80 })
+  @Column({ type: 'varchar', nullable: true, length: 80 })
   category: string | null;                   // e.g. "Hair", "Beard", "Skin"
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
@@ -45,10 +45,10 @@ export class Service extends BaseEntity {
   @Column({ type: 'smallint', default: 30 })
   durationMinutes: number;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   imageUrl: string | null;
 
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
   /**

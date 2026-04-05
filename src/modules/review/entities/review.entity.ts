@@ -34,7 +34,7 @@ import type { Appointment } from '@modules/appointment/entities/appointment.enti
 export class Review extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.reviews)
@@ -42,7 +42,7 @@ export class Review extends BaseEntity {
   salon: Salon;
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   customerId: string;
 
   @ManyToOne('User', (user: User) => user.reviews)
@@ -53,7 +53,7 @@ export class Review extends BaseEntity {
    * Optional barber-level rating within the same review.
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   barberId: string | null;
 
   @ManyToOne('Barber', (barber: Barber) => barber.reviews, { nullable: true })
@@ -62,14 +62,14 @@ export class Review extends BaseEntity {
 
   // ─── Proof of visit (at least one should be set for verified = true) ─────
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   queueEntryId: string | null;
 
   @ManyToOne('QueueEntry', (qe: QueueEntry) => qe.reviews, { nullable: true })
   @JoinColumn({ name: 'queue_entry_id' })
   queueEntry: QueueEntry | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   appointmentId: string | null;
 
   @ManyToOne('Appointment', (a: Appointment) => a.reviews, { nullable: true })
@@ -84,7 +84,7 @@ export class Review extends BaseEntity {
   @Column({ type: 'tinyint' })
   rating: number;
 
-  @Column({ nullable: true, length: 150 })
+  @Column({ type: 'varchar', nullable: true, length: 150 })
   title: string | null;
 
   @Column({ type: 'text', nullable: true })
@@ -94,13 +94,13 @@ export class Review extends BaseEntity {
    * Set to true when this review has a valid queueEntry or appointment reference.
    * Computed and stored to avoid a JOIN on every listing query.
    */
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   isVerifiedVisit: boolean;
 
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isPublished: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   publishedAt: Date | null;
 
   // ─── Owner reply ─────────────────────────────────────────────────────────
@@ -108,13 +108,13 @@ export class Review extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   replyBody: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   repliedBy: string | null;
 
   @ManyToOne('User', (user: User) => user.reviewReplies, { nullable: true })
   @JoinColumn({ name: 'replied_by' })
   repliedByUser: User | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   repliedAt: Date | null;
 }

@@ -17,7 +17,7 @@ import type { QueueEntry } from './queue-entry.entity';
 export class Queue extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.queues)
@@ -28,13 +28,13 @@ export class Queue extends BaseEntity {
   @Column({ type: 'date' })
   date: string;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   isOpen: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   openedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   closedAt: Date | null;
 
   /**

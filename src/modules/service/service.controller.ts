@@ -85,7 +85,7 @@ export class ServiceController {
   @ApiOperation({
     summary: 'Create a service in a salon',
     description:
-      'Adds a new service to the salon's catalog. ' +
+      "Adds a new service to the salon's catalog. " +
       'Requires SERVICE_CREATE permission (SALON_OWNER, SUPER_ADMIN).',
   })
   @ApiCreatedWrapped(ServiceResponseDto)

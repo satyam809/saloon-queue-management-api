@@ -22,7 +22,7 @@ import type { Review } from '@modules/review/entities/review.entity';
 @Index(['latitude', 'longitude'])        // geo-proximity queries
 export class Salon extends BaseEntity {
 
-  @Column()
+  @Column({ type: 'varchar' })
   ownerId: string;
 
   @ManyToOne('User', (user: User) => user.ownedSalons)
@@ -30,17 +30,17 @@ export class Salon extends BaseEntity {
   owner: User;
 
   // Onboarding staff who approved this salon
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   verifiedBy: string | null;
 
   @ManyToOne('User', (user: User) => user.verifiedSalons, { nullable: true })
   @JoinColumn({ name: 'verified_by' })
   verifier: User | null;
 
-  @Column({ length: 150 })
+  @Column({ type: 'varchar', length: 150 })
   name: string;
 
-  @Column({ unique: true, length: 160 })
+  @Column({ type: 'varchar', unique: true, length: 160 })
   slug: string;
 
   @Column({ type: 'text', nullable: true })
@@ -48,19 +48,19 @@ export class Salon extends BaseEntity {
 
   // ─── Location ────────────────────────────────────────────────────────────
 
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'varchar', nullable: true, length: 255 })
   address: string | null;
 
-  @Column({ nullable: true, length: 100 })
+  @Column({ type: 'varchar', nullable: true, length: 100 })
   city: string | null;
 
-  @Column({ nullable: true, length: 100 })
+  @Column({ type: 'varchar', nullable: true, length: 100 })
   state: string | null;
 
-  @Column({ nullable: true, length: 100, default: 'US' })
+  @Column({ type: 'varchar', nullable: true, length: 100, default: 'US' })
   country: string;
 
-  @Column({ nullable: true, length: 20 })
+  @Column({ type: 'varchar', nullable: true, length: 20 })
   postalCode: string | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
@@ -71,18 +71,18 @@ export class Salon extends BaseEntity {
 
   // ─── Contact ─────────────────────────────────────────────────────────────
 
-  @Column({ nullable: true, length: 20 })
+  @Column({ type: 'varchar', nullable: true, length: 20 })
   phone: string | null;
 
-  @Column({ nullable: true, length: 150 })
+  @Column({ type: 'varchar', nullable: true, length: 150 })
   email: string | null;
 
   // ─── Media ───────────────────────────────────────────────────────────────
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   logoUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   coverImageUrl: string | null;
 
   // ─── Business config ─────────────────────────────────────────────────────
@@ -91,10 +91,10 @@ export class Salon extends BaseEntity {
   @Column({ type: 'enum', enum: SalonStatus, default: SalonStatus.PENDING })
   status: SalonStatus;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   verifiedAt: Date | null;
 
   /** Populated when status=REJECTED — reason provided by the reviewer. */
@@ -115,7 +115,7 @@ export class Salon extends BaseEntity {
   @Column({ type: 'json', nullable: true })
   workingHours: Record<string, { open: string; close: string } | null> | null;
 
-  @Column({ default: 'UTC', length: 50 })
+  @Column({ type: 'varchar', default: 'UTC', length: 50 })
   timezone: string;
 
   // ─── Relationships ───────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ export class BarberService {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   barberId: string;
 
   @ManyToOne('Barber', (barber: Barber) => barber.barberServices, {
@@ -36,7 +36,7 @@ export class BarberService {
   @JoinColumn({ name: 'barber_id' })
   barber: Barber;
 
-  @Column()
+  @Column({ type: 'varchar' })
   serviceId: string;
 
   @ManyToOne('Service', (service: Service) => service.barberServices, {

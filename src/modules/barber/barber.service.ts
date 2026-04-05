@@ -154,7 +154,7 @@ export class BarberService {
 
     if (!isOwnProfile && !canManage) {
       throw new ForbiddenException(
-        'You do not have permission to change this barber's availability',
+        "You do not have permission to change this barber's availability",
       );
     }
 

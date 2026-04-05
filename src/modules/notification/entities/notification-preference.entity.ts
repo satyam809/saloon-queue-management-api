@@ -15,7 +15,7 @@ import type { User } from '@modules/user/entities/user.entity';
 @Index(['userId'])
 export class NotificationPreference extends BaseEntity {
 
-  @Column()
+  @Column({ type: 'varchar' })
   userId: string;
 
   @ManyToOne('User', { onDelete: 'CASCADE' })
@@ -29,6 +29,6 @@ export class NotificationPreference extends BaseEntity {
   channel: NotificationChannel;
 
   /** false = user has opted out of this type+channel combination. */
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isEnabled: boolean;
 }

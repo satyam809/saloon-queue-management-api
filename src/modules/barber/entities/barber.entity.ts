@@ -3,7 +3,6 @@ import {
   Column,
   ManyToOne,
   OneToMany,
-  ManyToMany,
   JoinColumn,
   Index,
 } from 'typeorm';
@@ -21,7 +20,7 @@ import type { Review } from '@modules/review/entities/review.entity';
 export class Barber extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.barbers)
@@ -33,26 +32,26 @@ export class Barber extends BaseEntity {
    * Barbers without app accounts can still be tracked for scheduling.
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   userId: string | null;
 
   @ManyToOne('User', (user: User) => user.barberProfiles, { nullable: true })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
 
-  @Column({ length: 100 })
+  @Column({ type: 'varchar', length: 100 })
   name: string;
 
   @Column({ type: 'text', nullable: true })
   bio: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   avatarUrl: string | null;
 
-  @Column({ nullable: true, length: 150 })
+  @Column({ type: 'varchar', nullable: true, length: 150 })
   email: string | null;
 
-  @Column({ nullable: true, length: 20 })
+  @Column({ type: 'varchar', nullable: true, length: 20 })
   phone: string | null;
 
   /**
@@ -71,7 +70,7 @@ export class Barber extends BaseEntity {
   @Column({ type: 'int', unsigned: true, default: 0 })
   totalReviews: number;
 
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isAvailable: boolean;
 
   @Index()

@@ -5,6 +5,7 @@ import Redis, { ChainableCommander } from 'ioredis';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: Redis;
+  private available = false;
   private readonly logger = new Logger(RedisService.name);
 
   constructor(private configService: ConfigService) {}
@@ -22,31 +23,32 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       retryStrategy: (times) => (times > 20 ? null : Math.min(times * 100, 3_000)),
 
       // ── Connection health ──────────────────────────────────────────────────
-      // Send a PING every 15 s so NAT/firewall idle-timeout rules (typically
-      // 30–60 s) never silently drop the connection.
       keepAlive: 15_000,
 
       // ── Socket hardening ───────────────────────────────────────────────────
-      // Abort a connection attempt that hangs for more than 5 s.
       connectTimeout: 5_000,
-      // Commands queued while the client is reconnecting are replayed
-      // automatically once the connection is restored (default: true — explicit
-      // here for documentation).
-      enableOfflineQueue: true,
-      // Disable Nagle: flush small writes immediately rather than coalescing
-      // them.  Reduces tail latency for the many small SET/GET calls this
-      // service makes.
+      enableOfflineQueue: false,
       noDelay: true,
     });
 
     this.client.on('connect', () => this.logger.log('Redis connected'));
-    this.client.on('ready',   () => this.logger.log('Redis ready'));
-    this.client.on('error',   (err) => this.logger.error('Redis error', err));
-    this.client.on('close',   () => this.logger.warn('Redis connection closed'));
+    this.client.on('ready',   () => { this.available = true;  this.logger.log('Redis ready'); });
+    this.client.on('error',   (err) => this.logger.error(err.message));
+    this.client.on('close',   () => { this.available = false; this.logger.warn('Redis connection closed'); });
   }
 
   async onModuleDestroy() {
     await this.client.quit();
+  }
+
+  private async exec<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+    if (!this.available) return fallback;
+    try {
+      return await fn();
+    } catch (err) {
+      this.logger.error(`Redis command failed: ${(err as Error).message}`);
+      return fallback;
+    }
   }
 
   // ─── Pipeline ─────────────────────────────────────────────────────────────
@@ -69,24 +71,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    return this.exec(() => this.client.get(key), null);
   }
 
   async set(key: string, value: string, ttl?: number): Promise<void> {
-    if (ttl) {
-      await this.client.set(key, value, 'EX', ttl);
-    } else {
-      await this.client.set(key, value);
-    }
+    await this.exec(
+      () => ttl ? this.client.set(key, value, 'EX', ttl) : this.client.set(key, value),
+      null,
+    );
   }
 
   async del(key: string): Promise<void> {
-    await this.client.del(key);
+    await this.exec(() => this.client.del(key), null);
   }
 
   async exists(key: string): Promise<boolean> {
-    const count = await this.client.exists(key);
-    return count > 0;
+    return this.exec(async () => (await this.client.exists(key)) > 0, false);
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -100,74 +100,76 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async ttl(key: string): Promise<number> {
-    return this.client.ttl(key);
+    return this.exec(() => this.client.ttl(key), -1);
   }
 
   async incr(key: string): Promise<number> {
-    return this.client.incr(key);
+    return this.exec(() => this.client.incr(key), 0);
   }
 
   async expire(key: string, seconds: number): Promise<void> {
-    await this.client.expire(key, seconds);
+    await this.exec(() => this.client.expire(key, seconds), null);
   }
 
   // ─── Hash operations ──────────────────────────────────────────────────────
 
   async hset(key: string, field: string, value: string | number): Promise<void> {
-    await this.client.hset(key, field, String(value));
+    await this.exec(() => this.client.hset(key, field, String(value)), null);
   }
 
   async hget(key: string, field: string): Promise<string | null> {
-    return this.client.hget(key, field);
+    return this.exec(() => this.client.hget(key, field), null);
   }
 
   async hmset(key: string, data: Record<string, string | number>): Promise<void> {
     const args: Record<string, string> = {};
-    for (const [k, v] of Object.entries(data)) {
-      args[k] = String(v);
-    }
-    await this.client.hmset(key, args);
+    for (const [k, v] of Object.entries(data)) args[k] = String(v);
+    await this.exec(() => this.client.hmset(key, args), null);
   }
 
   async hgetall(key: string): Promise<Record<string, string> | null> {
-    const result = await this.client.hgetall(key);
-    return result && Object.keys(result).length > 0 ? result : null;
+    return this.exec(async () => {
+      const result = await this.client.hgetall(key);
+      return result && Object.keys(result).length > 0 ? result : null;
+    }, null);
   }
 
   async hincrbyfloat(key: string, field: string, increment: number): Promise<number> {
-    const result = await this.client.hincrbyfloat(key, field, increment);
-    return parseFloat(result);
+    return this.exec(
+      async () => parseFloat(await this.client.hincrbyfloat(key, field, increment)),
+      0,
+    );
   }
 
   async hincrby(key: string, field: string, increment: number): Promise<number> {
-    return this.client.hincrby(key, field, increment);
+    return this.exec(() => this.client.hincrby(key, field, increment), 0);
   }
 
   // ─── Sorted Set operations ────────────────────────────────────────────────
 
   /** Add member with score. Returns 1 if added, 0 if updated. */
   async zadd(key: string, score: number, member: string): Promise<number> {
-    return this.client.zadd(key, score, member) as Promise<number>;
+    return this.exec(() => this.client.zadd(key, score, member) as Promise<number>, 0);
   }
 
   /** Remove one or more members. */
   async zrem(key: string, ...members: string[]): Promise<number> {
-    return this.client.zrem(key, ...members);
+    return this.exec(() => this.client.zrem(key, ...members), 0);
   }
 
   /** 0-based rank of member (lowest score first). Returns null if not found. */
   async zrank(key: string, member: string): Promise<number | null> {
-    return this.client.zrank(key, member);
+    return this.exec(() => this.client.zrank(key, member), null);
   }
 
   /** Number of members in the sorted set. */
   async zcard(key: string): Promise<number> {
-    return this.client.zcard(key);
+    return this.exec(() => this.client.zcard(key), 0);
   }
 
   /** Members from index start to stop (inclusive), lowest score first. */
   async zrange(key: string, start: number, stop: number): Promise<string[]> {
-    return this.client.zrange(key, start, stop);
+    return this.exec(() => this.client.zrange(key, start, stop), []);
   }
 
   /**
@@ -178,7 +180,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async eval(script: string, keys: string[], args: (string | number)[]): Promise<any> {
-    return this.client.eval(script, keys.length, ...keys, ...args.map(String));
+    return this.exec(
+      () => this.client.eval(script, keys.length, ...keys, ...args.map(String)),
+      null,
+    );
   }
 
   /**
@@ -187,8 +192,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
    * Requires Redis >= 5.0.
    */
   async zpopmin(key: string): Promise<[string, string] | null> {
-    const result = await this.client.zpopmin(key, 1);
-    if (!result || result.length < 2) return null;
-    return [result[0], result[1]];
+    return this.exec(async () => {
+      const result = await this.client.zpopmin(key, 1);
+      if (!result || result.length < 2) return null;
+      return [result[0], result[1]] as [string, string];
+    }, null);
   }
 }

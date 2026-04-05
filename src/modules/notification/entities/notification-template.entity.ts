@@ -24,7 +24,7 @@ export class NotificationTemplate extends BaseEntity {
    * Short title shown as notification header.
    * Supports {{variable}} interpolation.
    */
-  @Column({ length: 250 })
+  @Column({ type: 'varchar', length: 250 })
   titleTemplate: string;
 
   /**
@@ -35,6 +35,6 @@ export class NotificationTemplate extends BaseEntity {
   bodyTemplate: string;
 
   /** Inactive templates are skipped by the dispatcher. */
-  @Column({ default: true })
+  @Column({ type: 'boolean', default: true })
   isActive: boolean;
 }

@@ -52,7 +52,7 @@ export class NotificationDispatcherService {
     sms:    SmsChannelAdapter,
     push:   PushChannelAdapter,
   ) {
-    this.channelAdapters = new Map([
+    this.channelAdapters = new Map<NotificationChannel, INotificationChannel>([
       [NotificationChannel.IN_APP, inApp],
       [NotificationChannel.EMAIL,  email],
       [NotificationChannel.SMS,    sms],

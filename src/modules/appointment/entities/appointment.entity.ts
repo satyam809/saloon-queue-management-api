@@ -25,7 +25,7 @@ import type { Review } from '@modules/review/entities/review.entity';
 export class Appointment extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.appointments)
@@ -33,7 +33,7 @@ export class Appointment extends BaseEntity {
   salon: Salon;
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   customerId: string;
 
   @ManyToOne('User', (user: User) => user.reviews)
@@ -41,7 +41,7 @@ export class Appointment extends BaseEntity {
   customer: User;
 
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   barberId: string | null;
 
   @ManyToOne('Barber', (barber: Barber) => barber.appointments, { nullable: true })
@@ -49,7 +49,7 @@ export class Appointment extends BaseEntity {
   barber: Barber | null;
 
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   serviceId: string | null;
 
   @ManyToOne('Service', (service: Service) => service.appointments, { nullable: true })
@@ -60,7 +60,7 @@ export class Appointment extends BaseEntity {
    * When the customer checks in on the day of the appointment,
    * a QueueEntry is created and this FK is set.
    */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   queueEntryId: string | null;
 
   @OneToOne('QueueEntry', (qe: QueueEntry) => qe.appointment, { nullable: true })
@@ -81,7 +81,7 @@ export class Appointment extends BaseEntity {
   @Column({ type: 'smallint', default: 30 })
   durationMinutes: number;
 
-  @Column({ nullable: true, length: 150 })
+  @Column({ type: 'varchar', nullable: true, length: 150 })
   serviceType: string | null;
 
   @Index()
@@ -90,16 +90,16 @@ export class Appointment extends BaseEntity {
 
   // ─── Lifecycle timestamps ────────────────────────────────────────────────
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   confirmedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   reminderSentAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   cancelledAt: Date | null;
 
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'varchar', nullable: true, length: 255 })
   cancellationReason: string | null;
 
   @Column({ type: 'text', nullable: true })

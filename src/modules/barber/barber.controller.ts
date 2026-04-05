@@ -128,7 +128,7 @@ export class BarberController {
     summary: 'Set barber availability (available / unavailable)',
     description:
       'Quick toggle for real-time floor management. ' +
-      'STAFF, SALON_OWNER, SUPER_ADMIN, or the barber's own linked user account can call this.',
+      "STAFF, SALON_OWNER, SUPER_ADMIN, or the barber's own linked user account can call this.",
   })
   @ApiParam({ name: 'id', description: 'Barber UUID' })
   @ApiOkWrapped(BarberResponseDto)

@@ -48,7 +48,7 @@ export class Payment extends BaseEntity {
    * Generated in BeforeInsert so it is always set before the first save.
    */
   @Index({ unique: true })
-  @Column({ length: 30 })
+  @Column({ type: 'varchar', length: 30 })
   paymentNumber: string;
 
   @BeforeInsert()
@@ -62,7 +62,7 @@ export class Payment extends BaseEntity {
   // ─── Parties ──────────────────────────────────────────────────────────────
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   salonId: string;
 
   @ManyToOne('Salon', (salon: Salon) => salon.payments)
@@ -70,7 +70,7 @@ export class Payment extends BaseEntity {
   salon: Salon;
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   customerId: string;
 
   @ManyToOne('User', (user: User) => user.ownedSalons)
@@ -80,7 +80,7 @@ export class Payment extends BaseEntity {
   // ─── Source reference ─────────────────────────────────────────────────────
 
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   queueEntryId: string | null;
 
   @ManyToOne('QueueEntry', (qe: QueueEntry) => qe.payments, { nullable: true })
@@ -88,7 +88,7 @@ export class Payment extends BaseEntity {
   queueEntry: QueueEntry | null;
 
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   appointmentId: string | null;
 
   @ManyToOne('Appointment', (a: Appointment) => a.payments, { nullable: true })
@@ -117,7 +117,7 @@ export class Payment extends BaseEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   refundedAmount: number;
 
-  @Column({ length: 3, default: 'USD' })
+  @Column({ type: 'varchar', length: 3, default: 'USD' })
   currency: string;
 
   // ─── Payment method & gateway ─────────────────────────────────────────────
@@ -139,7 +139,7 @@ export class Payment extends BaseEntity {
    * Used for idempotency checks on webhook delivery.
    */
   @Index()
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'varchar', nullable: true, length: 255 })
   transactionId: string | null;
 
   /**
@@ -163,10 +163,10 @@ export class Payment extends BaseEntity {
 
   // ─── Lifecycle timestamps ─────────────────────────────────────────────────
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   paidAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   cancelledAt: Date | null;
 
   // ─── Relationships ────────────────────────────────────────────────────────

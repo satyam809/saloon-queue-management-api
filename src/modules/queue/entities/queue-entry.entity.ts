@@ -25,7 +25,7 @@ import type { Review } from '@modules/review/entities/review.entity';
 export class QueueEntry extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   queueId: string;
 
   @ManyToOne('Queue', (queue: Queue) => queue.entries)
@@ -33,7 +33,7 @@ export class QueueEntry extends BaseEntity {
   queue: Queue;
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   customerId: string;
 
   @ManyToOne('User', (user: User) => user.reviews)
@@ -44,7 +44,7 @@ export class QueueEntry extends BaseEntity {
    * Preferred barber — optional. NULL = any available barber.
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   barberId: string | null;
 
   @ManyToOne('Barber', (barber: Barber) => barber.queueEntries, { nullable: true })
@@ -55,7 +55,7 @@ export class QueueEntry extends BaseEntity {
    * Service requested — optional at check-in.
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   serviceId: string | null;
 
   @ManyToOne('Service', (service: Service) => service.queueEntries, { nullable: true })
@@ -87,22 +87,22 @@ export class QueueEntry extends BaseEntity {
 
   // ─── Lifecycle timestamps ────────────────────────────────────────────────
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   checkedInAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   calledAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   serviceStartedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   completedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   cancelledAt: Date | null;
 
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'varchar', nullable: true, length: 255 })
   cancellationReason: string | null;
 
   @Column({ type: 'text', nullable: true })

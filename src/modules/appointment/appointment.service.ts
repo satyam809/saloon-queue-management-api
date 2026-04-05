@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, IsNull, Repository } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -32,7 +32,7 @@ export class AppointmentService {
     const conflict = await this.appointmentRepo.findOne({
       where: {
         salonId: dto.salonId,
-        staffId: dto.staffId,
+        barberId: dto.staffId ?? IsNull(),
         status: AppointmentStatus.CONFIRMED,
         scheduledAt: Between(scheduledAt, endsAt),
       },
@@ -40,16 +40,21 @@ export class AppointmentService {
     if (conflict) throw new BadRequestException('Time slot already booked');
 
     const appointment = this.appointmentRepo.create({
-      ...dto,
+      salonId: dto.salonId,
+      customerId: userId,
+      barberId: dto.staffId ?? null,
       scheduledAt,
-      userId,
+      endsAt,
+      durationMinutes: duration,
+      serviceType: dto.serviceType ?? null,
+      notes: dto.notes ?? null,
     });
     return this.appointmentRepo.save(appointment);
   }
 
   async findForUser(userId: string, pagination: PaginationDto) {
     const [data, total] = await this.appointmentRepo.findAndCount({
-      where: { userId },
+      where: { customerId: userId },
       skip: pagination.skip,
       take: pagination.limit,
       order: { scheduledAt: 'DESC' },
@@ -80,7 +85,7 @@ export class AppointmentService {
   }
 
   async cancel(id: string, userId: string): Promise<Appointment> {
-    const appt = await this.appointmentRepo.findOne({ where: { id, userId } });
+    const appt = await this.appointmentRepo.findOne({ where: { id, customerId: userId } });
     if (!appt) throw new NotFoundException('Appointment not found');
     if (
       appt.status === AppointmentStatus.COMPLETED ||

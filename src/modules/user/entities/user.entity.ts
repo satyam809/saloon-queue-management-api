@@ -19,17 +19,17 @@ import type { Review } from '@modules/review/entities/review.entity';
 @Index(['email', 'deletedAt'])           // partial-like index for active-user lookups
 export class User extends BaseEntity {
 
-  @Column({ length: 100 })
+  @Column({ type: 'varchar', length: 100 })
   name: string;
 
-  @Column({ unique: true, length: 150 })
+  @Column({ type: 'varchar', unique: true, length: 150 })
   email: string;
 
-  @Column({ unique: true, nullable: true, length: 20 })
+  @Column({ type: 'varchar', unique: true, nullable: true, length: 20 })
   phone: string | null;
 
   @Exclude()
-  @Column({ name: 'password_hash' })
+  @Column({ type: 'varchar', name: 'password_hash' })
   passwordHash: string;
 
   @Column({ type: 'enum', enum: Role, default: Role.CUSTOMER })
@@ -39,16 +39,16 @@ export class User extends BaseEntity {
   @Column({ type: 'enum', enum: UserStatus, default: UserStatus.ACTIVE })
   status: UserStatus;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   avatarUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   emailVerifiedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   phoneVerifiedAt: Date | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   lastLoginAt: Date | null;
 
   // ─── Relationships ───────────────────────────────────────────────────────

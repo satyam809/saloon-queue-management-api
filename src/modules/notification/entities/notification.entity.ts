@@ -22,7 +22,7 @@ import type { User } from '@modules/user/entities/user.entity';
 export class Notification extends BaseEntity {
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   userId: string;
 
   @ManyToOne('User', (user: User) => user.notifications, { onDelete: 'CASCADE' })
@@ -36,22 +36,22 @@ export class Notification extends BaseEntity {
   @Column({ type: 'enum', enum: NotificationChannel, default: NotificationChannel.IN_APP })
   channel: NotificationChannel;
 
-  @Column({ length: 150 })
+  @Column({ type: 'varchar', length: 150 })
   title: string;
 
   @Column({ type: 'text' })
   body: string;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   isRead: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   readAt: Date | null;
 
   /**
    * NULL = pending delivery. Set by the notification worker on successful send.
    */
-  @Column({ nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   sentAt: Date | null;
 
   /**
@@ -68,7 +68,7 @@ export class Notification extends BaseEntity {
    * Type of the entity this notification relates to.
    * Used for deep-linking and grouping. E.g. 'queue_entry', 'appointment', 'payment'.
    */
-  @Column({ length: 80, nullable: true })
+  @Column({ type: 'varchar', length: 80, nullable: true })
   relatedEntityType: string | null;
 
   /**

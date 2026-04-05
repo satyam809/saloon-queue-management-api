@@ -40,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     if (!status) {
       // Cache miss — fetch from DB and populate
-      const user = await this.userService.findOne(payload.sub).catch(() => null);
+      const user = await this.userService.findMe(payload.sub).catch(() => null);
       if (!user) throw new UnauthorizedException('Account not found');
 
       status = user.status;

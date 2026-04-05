@@ -19,6 +19,7 @@ import {
   RESET_PASSWORD_TTL_SECONDS,
 } from '@shared/constants/app.constants';
 import { User } from '@modules/user/entities/user.entity';
+import { UserResponseDto } from '@modules/user/dto/user-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -88,7 +89,7 @@ export class AuthService {
    * @param payload - JWT payload from the validated refresh token
    */
   async refresh(payload: JwtPayload): Promise<TokensDto> {
-    const user = await this.userService.findOne(payload.sub);
+    const user = await this.userService.findEntityOrFail(payload.sub);
 
     if (user.status !== UserStatus.ACTIVE) {
       // Remove the refresh token on login so suspended users are fully locked out
@@ -125,7 +126,7 @@ export class AuthService {
       throw new BadRequestException('New password and confirmation do not match');
     }
 
-    const user = await this.userService.findOne(userId);
+    const user = await this.userService.findEntityOrFail(userId);
 
     const currentPasswordValid = await comparePassword(
       dto.currentPassword,
@@ -204,7 +205,7 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private async buildAuthResponse(user: User): Promise<AuthResponseDto> {
+  private async buildAuthResponse(user: User | UserResponseDto): Promise<AuthResponseDto> {
     const tokens = await this.generateTokens(user);
 
     const userDto: AuthUserDto = {
@@ -218,7 +219,7 @@ export class AuthService {
     return { tokens, user: userDto };
   }
 
-  private async generateTokens(user: User): Promise<TokensDto> {
+  private async generateTokens(user: User | UserResponseDto): Promise<TokensDto> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,

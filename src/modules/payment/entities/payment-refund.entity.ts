@@ -23,7 +23,6 @@ import type { User } from '@modules/user/entities/user.entity';
  * when the gateway confirms the refund asynchronously.
  */
 @Entity('payment_refunds')
-@Index(['paymentId'])
 @Index(['refundedAt'])
 export class PaymentRefund {
 
@@ -31,7 +30,7 @@ export class PaymentRefund {
   id: string;
 
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   paymentId: string;
 
   @ManyToOne('Payment', (p: Payment) => p.refunds, { onDelete: 'CASCADE' })
@@ -40,7 +39,7 @@ export class PaymentRefund {
 
   /** The staff member or system that issued this refund. */
   @Index()
-  @Column()
+  @Column({ type: 'varchar' })
   refundedById: string;
 
   @ManyToOne('User', (u: User) => u.ownedSalons, { nullable: true })
@@ -58,7 +57,7 @@ export class PaymentRefund {
    * External refund ID from the payment gateway.
    * Null for offline (cash) refunds or until the gateway confirms.
    */
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'varchar', nullable: true, length: 255 })
   transactionId: string | null;
 
   /**
@@ -67,7 +66,7 @@ export class PaymentRefund {
   @Column({ type: 'json', nullable: true })
   gatewayResponse: Record<string, unknown> | null;
 
-  @Column({ default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   refundedAt: Date;
 
   @CreateDateColumn({ type: 'datetime' })
