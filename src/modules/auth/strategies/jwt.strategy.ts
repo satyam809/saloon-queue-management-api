@@ -33,6 +33,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
+  /**
+   * Validates the decoded JWT payload on every authenticated request.
+   * Performs a Redis-cached status check to ensure the account is still ACTIVE
+   * without hitting the database on every call.
+   *
+   * @param payload - The decoded and signature-verified JWT payload
+   * @returns The original JWT payload, which NestJS attaches to the request as req.user
+   * @throws UnauthorizedException if the account is not found, suspended, or inactive
+   */
   async validate(payload: JwtPayload): Promise<JwtPayload> {
     const cacheKey = USER_CACHE_KEY.STATUS(payload.sub);
 

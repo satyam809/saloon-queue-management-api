@@ -38,49 +38,133 @@ import {
 // lightweight class purely to give Swagger a typed schema to render.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * Lightweight Swagger schema class representing a serialised appointment.
+ *
+ * This class is used exclusively by the OpenAPI/Swagger documentation layer
+ * to describe the shape of appointment responses. The actual service returns
+ * the underlying {@link Appointment} entity directly.
+ */
 class AppointmentResponseDto {
+  /**
+   * Unique identifier of the appointment (UUID).
+   *
+   * @example 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+   */
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   id: string;
 
+  /**
+   * UUID of the salon where the appointment is booked.
+   *
+   * @example 'b2c3d4e5-f6a7-8901-bcde-f01234567890'
+   */
   @ApiProperty({ example: 'b2c3d4e5-f6a7-8901-bcde-f01234567890' })
   salonId: string;
 
+  /**
+   * UUID of the assigned staff member, or `null` when none is assigned.
+   *
+   * @example 'c3d4e5f6-a7b8-9012-cdef-012345678901'
+   */
   @ApiPropertyOptional({ example: 'c3d4e5f6-a7b8-9012-cdef-012345678901', nullable: true })
   staffId: string | null;
 
+  /**
+   * UUID of the customer who made the appointment.
+   *
+   * @example 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+   */
   @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
   customerId: string;
 
+  /**
+   * ISO 8601 timestamp for when the appointment is scheduled to begin.
+   *
+   * @example '2026-04-10T10:00:00.000Z'
+   */
   @ApiProperty({ example: '2026-04-10T10:00:00.000Z' })
   scheduledAt: string;
 
+  /**
+   * Duration of the appointment in minutes.
+   *
+   * @example 30
+   */
   @ApiProperty({ example: 30 })
   durationMinutes: number;
 
+  /**
+   * Human-readable label for the type of service requested, or `null`.
+   *
+   * @example 'Haircut'
+   */
   @ApiPropertyOptional({ example: 'Haircut', nullable: true })
   serviceType: string | null;
 
+  /**
+   * Optional free-text notes or special requests, or `null`.
+   *
+   * @example 'Please trim the beard too.'
+   */
   @ApiPropertyOptional({ example: 'Please trim the beard too.', nullable: true })
   notes: string | null;
 
+  /**
+   * Current lifecycle status of the appointment.
+   *
+   * @example 'SCHEDULED'
+   */
   @ApiProperty({ example: 'SCHEDULED', description: 'SCHEDULED | CONFIRMED | COMPLETED | CANCELLED' })
   status: string;
 
+  /**
+   * ISO 8601 timestamp at which the appointment record was created.
+   *
+   * @example '2026-04-03T08:00:00.000Z'
+   */
   @ApiProperty({ example: '2026-04-03T08:00:00.000Z' })
   createdAt: string;
 
+  /**
+   * ISO 8601 timestamp at which the appointment record was last updated.
+   *
+   * @example '2026-04-03T08:00:00.000Z'
+   */
   @ApiProperty({ example: '2026-04-03T08:00:00.000Z' })
   updatedAt: string;
 }
 
+/**
+ * REST controller for the `/appointments` resource.
+ *
+ * Exposes endpoints for booking, retrieving, updating, and cancelling
+ * appointments. All routes require a valid Bearer token.
+ */
 @ApiTags('Appointments')
 @ApiBearerAuth('bearer')
 @Controller('appointments')
 export class AppointmentController {
+  /**
+   * Injects the {@link AppointmentService} used by all route handlers.
+   *
+   * @param appointmentService - The service layer responsible for appointment business logic.
+   */
   constructor(private readonly appointmentService: AppointmentService) {}
 
   // ─── Book appointment ─────────────────────────────────────────────────────
 
+  /**
+   * POST /appointments
+   *
+   * Books a new appointment for the currently authenticated customer.
+   * The `scheduledAt` time must be in the future and must not conflict with
+   * another CONFIRMED appointment for the same salon and (optionally) staff member.
+   *
+   * @param dto    - Payload describing the desired appointment.
+   * @param userId - UUID of the authenticated customer extracted from the JWT.
+   * @returns The newly created appointment wrapped in a success envelope.
+   */
   @Post()
   @ApiOperation({
     summary: 'Book an appointment',
@@ -99,6 +183,16 @@ export class AppointmentController {
 
   // ─── My appointments ──────────────────────────────────────────────────────
 
+  /**
+   * GET /appointments/my
+   *
+   * Returns a paginated list of appointments belonging to the authenticated
+   * customer, ordered newest-first by `scheduledAt`.
+   *
+   * @param userId     - UUID of the authenticated customer extracted from the JWT.
+   * @param pagination - Pagination parameters (`page`, `limit`).
+   * @returns Paginated appointment records for the authenticated user.
+   */
   @Get('my')
   @ApiOperation({
     summary: 'Get my appointments',
@@ -117,6 +211,17 @@ export class AppointmentController {
 
   // ─── Salon appointments (staff/owner) ─────────────────────────────────────
 
+  /**
+   * GET /appointments/salon/:salonId
+   *
+   * Returns a paginated list of all appointments for the specified salon,
+   * ordered ascending by `scheduledAt`. Restricted to SALON_OWNER, STAFF,
+   * and SUPER_ADMIN roles.
+   *
+   * @param salonId    - UUID of the target salon.
+   * @param pagination - Pagination parameters (`page`, `limit`).
+   * @returns Paginated appointment records for the given salon.
+   */
   @Get('salon/:salonId')
   @Roles(Role.SALON_OWNER, Role.STAFF, Role.SUPER_ADMIN)
   @ApiOperation({
@@ -137,6 +242,15 @@ export class AppointmentController {
 
   // ─── Single appointment ───────────────────────────────────────────────────
 
+  /**
+   * GET /appointments/:id
+   *
+   * Retrieves a single appointment by its UUID. Customers may only fetch
+   * their own appointments; staff and owners may fetch any.
+   *
+   * @param id - UUID of the appointment to retrieve.
+   * @returns The matching appointment wrapped in a success envelope.
+   */
   @Get(':id')
   @ApiOperation({
     summary: 'Get appointment by ID',
@@ -151,6 +265,16 @@ export class AppointmentController {
 
   // ─── Update appointment ───────────────────────────────────────────────────
 
+  /**
+   * PATCH /appointments/:id
+   *
+   * Updates an existing appointment (e.g. reschedule or change notes).
+   * Restricted to SALON_OWNER, STAFF, and SUPER_ADMIN roles.
+   *
+   * @param id  - UUID of the appointment to update.
+   * @param dto - Partial payload with fields to update.
+   * @returns The updated appointment wrapped in a success envelope.
+   */
   @Patch(':id')
   @Roles(Role.SALON_OWNER, Role.STAFF, Role.SUPER_ADMIN)
   @ApiOperation({
@@ -169,6 +293,18 @@ export class AppointmentController {
 
   // ─── Cancel appointment ───────────────────────────────────────────────────
 
+  /**
+   * PATCH /appointments/:id/cancel
+   *
+   * Allows the authenticated customer to cancel one of their own appointments.
+   * Only appointments in the SCHEDULED or CONFIRMED state may be cancelled;
+   * attempting to cancel a COMPLETED or already CANCELLED appointment returns
+   * a 400 Bad Request.
+   *
+   * @param id     - UUID of the appointment to cancel.
+   * @param userId - UUID of the authenticated customer extracted from the JWT.
+   * @returns The cancelled appointment wrapped in a success envelope.
+   */
   @Patch(':id/cancel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

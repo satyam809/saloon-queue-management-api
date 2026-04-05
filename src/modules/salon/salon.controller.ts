@@ -41,6 +41,15 @@ import { Permission } from '@common/enums/permission.enum';
 import { Role } from '@common/enums/role.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
+/**
+ * REST controller for salon management.
+ *
+ * Handles creation, retrieval, update, approval/rejection, archiving, and
+ * soft-deletion of salon records. Access rules vary by endpoint — see each
+ * method for the exact permission requirements.
+ *
+ * Base route: `/salons`
+ */
 @ApiTags('Salons')
 @ApiBearerAuth('bearer')
 @Controller('salons')
@@ -54,6 +63,10 @@ export class SalonController {
    * Public: returns only ACTIVE salons.
    * Authenticated admins & onboarding staff: all statuses with optional filter.
    * SALON_OWNER: their own salons (any status).
+   *
+   * @param query - Pagination, search, status filter, and sort options.
+   * @param requester - JWT payload of the authenticated caller (may be undefined for public calls).
+   * @returns Paginated list of salons visible to the caller.
    */
   @Public()
   @Get()
@@ -75,6 +88,16 @@ export class SalonController {
 
   // ─── Public: single salon detail ──────────────────────────────────────────
 
+  /**
+   * GET /salons/:id
+   * Active salons are publicly readable. Non-active salons are visible only to
+   * the owner, onboarding staff, or super admin.
+   *
+   * @param id - UUID of the salon to retrieve.
+   * @param requester - JWT payload of the authenticated caller.
+   * @returns The salon details if the caller has read access.
+   * @throws NotFoundException when the salon does not exist or the caller lacks read access.
+   */
   @Public()
   @Get(':id')
   @ApiOperation({
@@ -99,6 +122,11 @@ export class SalonController {
    * POST /salons
    * The authenticated user becomes the salon owner.
    * Requires SALON_CREATE permission (granted to SALON_OWNER, SUPER_ADMIN).
+   *
+   * @param dto - Salon creation payload.
+   * @param requester - JWT payload of the authenticated caller who will own the salon.
+   * @returns The newly created salon in PENDING status.
+   * @throws ConflictException when a slug collision cannot be resolved.
    */
   @Post()
   @RequirePermissions(Permission.SALON_CREATE)
@@ -125,6 +153,13 @@ export class SalonController {
    * SALON_OWNER: can update their own salon.
    * SUPER_ADMIN: can update any salon (SALON_UPDATE_ANY bypasses ownership).
    * The service enforces ownership for non-admins.
+   *
+   * @param id - UUID of the salon to update.
+   * @param dto - Fields to update (all optional).
+   * @param requester - JWT payload of the authenticated caller.
+   * @returns The updated salon.
+   * @throws ForbiddenException when the caller does not own the salon and is not SUPER_ADMIN.
+   * @throws BadRequestException when the salon status prevents updates.
    */
   @Patch(':id')
   @RequirePermissions(Permission.SALON_UPDATE_OWN)
@@ -151,6 +186,12 @@ export class SalonController {
    * PATCH /salons/:id/approve
    * Sets status=ACTIVE, isVerified=true, records verifier.
    * Only ONBOARDING_STAFF and SUPER_ADMIN can approve.
+   *
+   * @param id - UUID of the salon to approve.
+   * @param dto - Optional approval note.
+   * @param requester - JWT payload of the onboarding staff or super admin.
+   * @returns The approved salon with status ACTIVE.
+   * @throws BadRequestException when the salon is not in PENDING status.
    */
   @Patch(':id/approve')
   @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
@@ -179,6 +220,12 @@ export class SalonController {
    * PATCH /salons/:id/reject
    * Sets status=REJECTED, records the reason.
    * Only ONBOARDING_STAFF and SUPER_ADMIN can reject.
+   *
+   * @param id - UUID of the salon to reject.
+   * @param dto - Rejection reason payload.
+   * @param requester - JWT payload of the onboarding staff or super admin.
+   * @returns The rejected salon with status REJECTED.
+   * @throws BadRequestException when the salon is not in PENDING status.
    */
   @Patch(':id/reject')
   @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
@@ -206,6 +253,12 @@ export class SalonController {
    * PATCH /salons/:id/archive
    * Soft status transition → ARCHIVED.
    * Owner can archive their own salon; SUPER_ADMIN can archive any.
+   *
+   * @param id - UUID of the salon to archive.
+   * @param requester - JWT payload of the caller.
+   * @returns void (204 No Content).
+   * @throws BadRequestException when the salon is already archived.
+   * @throws ForbiddenException when the caller does not own the salon and is not SUPER_ADMIN.
    */
   @Patch(':id/archive')
   @RequirePermissions(Permission.SALON_DELETE_OWN)
@@ -232,6 +285,11 @@ export class SalonController {
    * DELETE /salons/:id
    * Sets deletedAt — row is preserved but invisible to all queries.
    * Restricted to SUPER_ADMIN.
+   *
+   * @param id - UUID of the salon to soft-delete.
+   * @param requester - JWT payload of the super admin caller.
+   * @returns void (204 No Content).
+   * @throws ForbiddenException when the caller is not SUPER_ADMIN.
    */
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN)

@@ -9,18 +9,31 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * Request body for POST /auth/register.
+ * Creates a new CUSTOMER account. Role assignment is not accepted here —
+ * admin-created accounts with elevated roles go through POST /users.
+ */
 export class RegisterDto {
+  /** Full display name of the new user. */
   @ApiProperty({ example: 'Jane Doe' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
   name: string;
 
+  /** Email address — must be unique across all active accounts. */
   @ApiProperty({ example: 'jane@example.com' })
   @IsEmail({}, { message: 'Please provide a valid email address' })
   @MaxLength(150)
   email: string;
 
+  /**
+   * Password for the new account.
+   * Must be 8–72 characters and satisfy complexity requirements:
+   * at least one uppercase letter, one lowercase letter, one digit,
+   * and one special character from [@$!%*?&-_#^()].
+   */
   @ApiProperty({
     example: 'Secret@123',
     description:
@@ -35,6 +48,7 @@ export class RegisterDto {
   })
   password: string;
 
+  /** Optional phone number. Must be unique if provided. */
   @ApiPropertyOptional({ example: '+1234567890' })
   @IsOptional()
   @IsString()

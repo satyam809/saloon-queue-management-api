@@ -34,6 +34,14 @@ import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { Permission } from '@common/enums/permission.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
+/**
+ * ReviewController — HTTP interface for the salon review system.
+ *
+ * Public endpoints (GET) are accessible without authentication.
+ * Write endpoints require a valid JWT and the appropriate permission.
+ *
+ * Base route: /reviews
+ */
 @ApiTags('Reviews')
 @ApiBearerAuth('bearer')
 @Controller('reviews')
@@ -42,6 +50,17 @@ export class ReviewController {
 
   // ─── Public: list reviews ─────────────────────────────────────────────────
 
+  /**
+   * GET /reviews
+   *
+   * Returns a paginated list of reviews. Public callers only see published
+   * reviews. Admins (SUPER_ADMIN / ONBOARDING_STAFF) may pass
+   * `?isPublished=false` to inspect hidden reviews.
+   *
+   * @param query - Filtering, sorting, and pagination options.
+   * @param requester - JWT payload of the authenticated caller (may be undefined for public calls).
+   * @returns Paginated list of ReviewResponseDto.
+   */
   @Public()
   @Get()
   @ApiOperation({
@@ -63,6 +82,17 @@ export class ReviewController {
 
   // ─── Public: single review ────────────────────────────────────────────────
 
+  /**
+   * GET /reviews/:id
+   *
+   * Returns a single review by UUID. Unpublished reviews are hidden from
+   * non-admin callers (NotFoundException is thrown instead).
+   *
+   * @param id - UUID of the review.
+   * @param requester - JWT payload of the authenticated caller.
+   * @returns The requested ReviewResponseDto.
+   * @throws NotFoundException if the review does not exist or is hidden.
+   */
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a single review' })
@@ -78,6 +108,19 @@ export class ReviewController {
 
   // ─── Create review ────────────────────────────────────────────────────────
 
+  /**
+   * POST /reviews
+   *
+   * Allows an authenticated customer to submit a review for a salon visit.
+   * Providing a `queueEntryId` or `appointmentId` marks the review as a
+   * verified visit. One review per queue-visit and per appointment is enforced.
+   *
+   * @param dto - Review creation payload.
+   * @param requester - JWT payload of the authenticated customer.
+   * @returns The newly created ReviewResponseDto.
+   * @throws ForbiddenException if the caller is not a customer.
+   * @throws BadRequestException if a review for the same visit already exists.
+   */
   @Post()
   @RequirePermissions(Permission.REVIEW_CREATE)
   @ApiOperation({
@@ -99,6 +142,19 @@ export class ReviewController {
 
   // ─── Reply to review ──────────────────────────────────────────────────────
 
+  /**
+   * PATCH /reviews/:id/reply
+   *
+   * Allows a salon owner or SUPER_ADMIN to post a public reply to a customer
+   * review. Calling this endpoint again will overwrite an existing reply.
+   *
+   * @param id - UUID of the review to reply to.
+   * @param dto - Reply payload containing the reply text.
+   * @param requester - JWT payload of the authenticated salon owner or admin.
+   * @returns The updated ReviewResponseDto with the reply populated.
+   * @throws ForbiddenException if the caller lacks REVIEW_REPLY permission.
+   * @throws NotFoundException if the review does not exist.
+   */
   @Patch(':id/reply')
   @RequirePermissions(Permission.REVIEW_REPLY)
   @ApiOperation({
@@ -120,6 +176,20 @@ export class ReviewController {
 
   // ─── Admin: flag / moderate review ───────────────────────────────────────
 
+  /**
+   * PATCH /reviews/:id/flag
+   *
+   * Allows a SUPER_ADMIN to hide or restore a review by toggling its
+   * `isPublished` flag. Pass `{ "isPublished": false }` to hide or
+   * `{ "isPublished": true }` to restore.
+   *
+   * @param id - UUID of the review to moderate.
+   * @param dto - Flag payload containing the new isPublished value.
+   * @param requester - JWT payload of the SUPER_ADMIN caller.
+   * @returns The updated ReviewResponseDto.
+   * @throws ForbiddenException if the caller lacks REVIEW_MODERATE permission.
+   * @throws NotFoundException if the review does not exist.
+   */
   @Patch(':id/flag')
   @RequirePermissions(Permission.REVIEW_MODERATE)
   @ApiOperation({

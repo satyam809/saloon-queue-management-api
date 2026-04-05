@@ -1,6 +1,10 @@
 import { SetMetadata } from '@nestjs/common';
 import { Permission } from '@common/enums/permission.enum';
 
+/**
+ * Metadata key used by `PermissionsGuard` to look up required permissions
+ * on a route handler or controller class.
+ */
 export const PERMISSIONS_KEY = 'permissions';
 
 /**
@@ -11,6 +15,9 @@ export const PERMISSIONS_KEY = 'permissions';
  *   - Adding a new role only requires updating role-permissions.map.ts
  *   - Controllers remain decoupled from specific role names
  *   - The intent is self-documenting ("who can manage queues" vs "staff and owners")
+ *
+ * @param permissions - One or more `Permission` values that the caller must hold
+ *                      (AND logic — all must be present).
  *
  * @example
  * @RequirePermissions(Permission.QUEUE_MANAGE)

@@ -28,6 +28,23 @@ import databaseConfig from '@config/database.config';
 import jwtConfig from '@config/jwt.config';
 import redisConfig from '@config/redis.config';
 
+/**
+ * Root application module.
+ *
+ * Wires together all configuration, infrastructure, and feature modules:
+ *  - ConfigModule:   loads and validates environment variables globally.
+ *  - ThrottlerModule: applies three-tier rate limiting (default / auth / queue).
+ *  - WinstonModule:  provides a structured logger across the entire application.
+ *  - TypeOrmModule:  bootstraps the MySQL connection pool via DatabaseConfig.
+ *  - CommonModule:   registers global JWT, Roles, and Permissions guards.
+ *  - SharedModule:   provides the Redis service application-wide.
+ *  - Feature modules: Auth, User, Salon, Barber, Service, Queue, Payment,
+ *                     Appointment, Notification, Review, Analytics, ActivityLog.
+ *
+ * A global ThrottlerGuard is registered here so that every route is rate-limited
+ * by default. Individual routes may override limits with @Throttle() or opt out
+ * with @SkipThrottle().
+ */
 @Module({
   imports: [
     // Config — loads env vars and validates them

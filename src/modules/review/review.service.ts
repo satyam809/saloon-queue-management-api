@@ -20,6 +20,12 @@ import { canPerform } from '@common/rbac/rbac.util';
 import { Permission } from '@common/enums/permission.enum';
 import { ActivityLogService } from '@modules/activity-log/activity-log.service';
 
+/**
+ * ReviewService — business logic for the salon review system.
+ *
+ * Handles creating, querying, replying to, and moderating reviews.
+ * All state-changing operations emit activity log entries via ActivityLogService.
+ */
 @Injectable()
 export class ReviewService {
   constructor(
@@ -30,6 +36,23 @@ export class ReviewService {
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a new review submitted by an authenticated customer.
+   *
+   * Enforces:
+   * - Only CUSTOMER role may submit reviews.
+   * - One review per queue-visit (via `queueEntryId`).
+   * - One review per appointment (via `appointmentId`).
+   *
+   * A review is automatically marked as `isVerifiedVisit = true` when
+   * either `queueEntryId` or `appointmentId` is provided.
+   *
+   * @param dto - Review creation payload from the request body.
+   * @param requester - JWT payload of the authenticated customer.
+   * @returns The persisted ReviewResponseDto.
+   * @throws ForbiddenException if the caller is not a customer.
+   * @throws BadRequestException if a duplicate review is detected.
+   */
   async create(dto: CreateReviewDto, requester: JwtPayload): Promise<ReviewResponseDto> {
     // Only customers may submit reviews
     if (requester.role !== Role.CUSTOMER) {
@@ -79,6 +102,18 @@ export class ReviewService {
 
   // ─── Read: list ───────────────────────────────────────────────────────────
 
+  /**
+   * Returns a paginated, filterable list of reviews.
+   *
+   * Non-admin callers always receive only published reviews. Admins
+   * (SUPER_ADMIN / ONBOARDING_STAFF) may additionally filter by
+   * `isPublished=false` to inspect hidden reviews.
+   *
+   * @param query - Filtering (salonId, customerId, barberId, rating, isVerifiedVisit,
+   *                isPublished), sorting (sortBy, sortOrder), and pagination options.
+   * @param requester - Optional JWT payload; determines admin visibility.
+   * @returns Paginated result containing ReviewResponseDto items.
+   */
   async findAll(
     query: ReviewQueryDto,
     requester?: JwtPayload,
@@ -133,6 +168,17 @@ export class ReviewService {
 
   // ─── Read: single ─────────────────────────────────────────────────────────
 
+  /**
+   * Returns a single review by its UUID.
+   *
+   * Unpublished reviews are hidden from non-admin callers — a NotFoundException
+   * is thrown rather than revealing the existence of the record.
+   *
+   * @param id - UUID of the review.
+   * @param requester - Optional JWT payload; determines visibility of unpublished reviews.
+   * @returns The requested ReviewResponseDto.
+   * @throws NotFoundException if the review does not exist or is not visible to the caller.
+   */
   async findOne(id: string, requester?: JwtPayload): Promise<ReviewResponseDto> {
     const review = await this.findEntityOrFail(id);
 
@@ -154,6 +200,13 @@ export class ReviewService {
   /**
    * Salon owner (or SUPER_ADMIN) posts a reply to a customer review.
    * The reply can be updated by calling this endpoint again.
+   *
+   * @param id - UUID of the review to reply to.
+   * @param dto - Reply payload containing the reply text.
+   * @param requester - JWT payload of the authenticated salon owner or admin.
+   * @returns The updated ReviewResponseDto with reply fields populated.
+   * @throws ForbiddenException if the caller lacks REVIEW_REPLY permission.
+   * @throws NotFoundException if the review does not exist.
    */
   async reply(
     id: string,
@@ -192,6 +245,16 @@ export class ReviewService {
   /**
    * Admin sets isPublished to false (hide) or true (restore).
    * Requires REVIEW_MODERATE permission (SUPER_ADMIN only).
+   *
+   * When restoring a previously hidden review that lacks a `publishedAt`
+   * timestamp, the timestamp is set to the current time.
+   *
+   * @param id - UUID of the review to moderate.
+   * @param dto - Flag payload with the desired `isPublished` value and optional reason.
+   * @param requester - JWT payload of the SUPER_ADMIN caller.
+   * @returns The updated ReviewResponseDto.
+   * @throws ForbiddenException if the caller lacks REVIEW_MODERATE permission.
+   * @throws NotFoundException if the review does not exist.
    */
   async flag(
     id: string,
@@ -219,6 +282,16 @@ export class ReviewService {
 
   // ─── Internal ─────────────────────────────────────────────────────────────
 
+  /**
+   * Loads a Review entity by UUID or throws NotFoundException.
+   *
+   * Intended for internal use within this service to avoid repeating the
+   * null-check pattern across methods.
+   *
+   * @param id - UUID of the review.
+   * @returns The Review entity.
+   * @throws NotFoundException if no review with the given id exists.
+   */
   async findEntityOrFail(id: string): Promise<Review> {
     const review = await this.reviewRepo.findOne({ where: { id } });
     if (!review) throw new NotFoundException('Review not found');

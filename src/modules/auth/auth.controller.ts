@@ -36,6 +36,14 @@ import {
   ApiOkWrapped,
 } from '@common/swagger/decorators';
 
+/**
+ * AuthController handles all authentication lifecycle endpoints:
+ * registration, login, token refresh, logout, password changes,
+ * and the forgot/reset password flow.
+ *
+ * Public endpoints are decorated with @Public() to bypass the global JWT guard.
+ * Authenticated endpoints require a valid Bearer token in the Authorization header.
+ */
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -43,6 +51,14 @@ export class AuthController {
 
   // ─── Register ─────────────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/register
+   * Creates a new CUSTOMER account and immediately returns an auth token pair.
+   * The email must not already be registered on an active account.
+   *
+   * @param dto - Registration data (name, email, password, optional phone)
+   * @returns JWT tokens and basic user profile
+   */
   @Public()
   @Post('register')
   @ApiOperation({
@@ -58,6 +74,15 @@ export class AuthController {
 
   // ─── Login ────────────────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/login
+   * Authenticates the user via email/password using LocalStrategy.
+   * On success, returns a short-lived access token and a long-lived refresh token.
+   * req.user is populated by LocalStrategy before this handler runs.
+   *
+   * @param req - Express request object with user entity attached by LocalStrategy
+   * @returns JWT token pair and basic user profile
+   */
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -78,6 +103,16 @@ export class AuthController {
 
   // ─── Refresh ──────────────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/refresh
+   * Rotates the token pair using a valid refresh token sent in the request body.
+   * JwtRefreshStrategy validates the token signature and checks it against Redis.
+   * Reusing an already-rotated token is treated as a theft signal and invalidates
+   * all sessions for the user.
+   *
+   * @param req - Express request object with JWT payload attached by JwtRefreshStrategy
+   * @returns New JWT access and refresh tokens
+   */
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -102,6 +137,15 @@ export class AuthController {
 
   // ─── Logout ───────────────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/logout
+   * Revokes the user's refresh token in Redis, ending the current session.
+   * The access token stays valid until its natural expiry; clients must discard it locally.
+   * Requires a valid Bearer token in the Authorization header.
+   *
+   * @param userId - UUID of the authenticated user, extracted from the JWT sub claim
+   * @returns void — responds with 204 No Content
+   */
   @ApiBearerAuth('bearer')
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -119,6 +163,16 @@ export class AuthController {
 
   // ─── Change password ──────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/change-password
+   * Validates the current password, sets the new one, and revokes all active sessions.
+   * The user must re-authenticate with the new password after this call.
+   * Requires a valid Bearer token in the Authorization header.
+   *
+   * @param userId - UUID of the authenticated user, extracted from the JWT sub claim
+   * @param dto - Current password, new password, and confirmation
+   * @returns void — responds with 204 No Content
+   */
   @ApiBearerAuth('bearer')
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -139,6 +193,15 @@ export class AuthController {
 
   // ─── Forgot password ──────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/forgot-password
+   * Generates a one-time password reset token (10-minute TTL) and dispatches a
+   * reset email to the address provided. Always returns the same 200 response
+   * regardless of whether the email is registered, preventing user enumeration.
+   *
+   * @param dto - Email address to send the reset link to
+   * @returns A generic success message
+   */
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
@@ -159,6 +222,14 @@ export class AuthController {
 
   // ─── Reset password ───────────────────────────────────────────────────────
 
+  /**
+   * POST /auth/reset-password
+   * Consumes a one-time reset token from Redis, sets the new password hash,
+   * and revokes all active sessions. The token is invalidated after first use.
+   *
+   * @param dto - One-time reset token, new password, and confirmation
+   * @returns void — responds with 204 No Content
+   */
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)

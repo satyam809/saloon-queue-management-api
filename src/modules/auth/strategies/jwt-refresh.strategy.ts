@@ -37,6 +37,16 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
     });
   }
 
+  /**
+   * Validates the refresh token after the JWT signature has been verified by Passport.
+   * Checks that the token matches the latest stored value in Redis to enforce
+   * single-use rotation. Token reuse triggers full session invalidation.
+   *
+   * @param req - The Express request object, used to extract the raw refresh token from the body
+   * @param payload - The decoded and verified JWT payload
+   * @returns The JWT payload augmented with the raw refresh token string
+   * @throws UnauthorizedException if the refresh token is missing, expired, already used, or reused (theft detection)
+   */
   async validate(
     req: Request,
     payload: JwtPayload,

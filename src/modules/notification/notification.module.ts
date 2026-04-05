@@ -23,6 +23,21 @@ import { NotificationController } from './notification.controller';
 import { NotificationTemplateController } from './notification-template.controller';
 import { NotificationPreferenceController } from './notification-preference.controller';
 
+/**
+ * NotificationModule — full-stack notification system.
+ *
+ * Responsibilities:
+ * - Persisting notification rows (NotificationService).
+ * - Rendering and dispatching across IN_APP / EMAIL / SMS / PUSH channels
+ *   (NotificationDispatcherService + channel adapters).
+ * - Managing per-user opt-in/opt-out preferences (NotificationPreferenceService).
+ * - Admin CRUD for notification templates (NotificationTemplateService).
+ *
+ * Exports:
+ * - NotificationService — read / mark-read / delete for the notification inbox.
+ * - NotificationDispatcherService — import NotificationModule in any feature
+ *   module that needs to trigger notifications (e.g. QueueModule, AppointmentModule).
+ */
 @Module({
   imports: [
     TypeOrmModule.forFeature([

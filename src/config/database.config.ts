@@ -4,6 +4,16 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
 import { SnakeNamingStrategy } from '@database/snake-naming.strategy';
 
+/**
+ * Database configuration namespace (`database.*`).
+ *
+ * Values are resolved from environment variables with safe defaults:
+ *  - `DB_HOST`     → `database.host`     (default: `"localhost"`)
+ *  - `DB_PORT`     → `database.port`     (default: `3306`)
+ *  - `DB_USERNAME` → `database.username` (default: `"root"`)
+ *  - `DB_PASSWORD` → `database.password` (default: empty string)
+ *  - `DB_NAME`     → `database.name`     (default: `"saloon_queue"`)
+ */
 export default registerAs('database', () => ({
   host: process.env.DB_HOST ?? 'localhost',
   port: parseInt(process.env.DB_PORT ?? '3306', 10),
@@ -12,10 +22,31 @@ export default registerAs('database', () => ({
   name: process.env.DB_NAME ?? 'saloon_queue',
 }));
 
+/**
+ * Injectable factory that builds TypeORM connection options at runtime.
+ *
+ * Used by `TypeOrmModule.forRootAsync({ useClass: DatabaseConfig })` in
+ * `AppModule`. Connection settings are read from the NestJS `ConfigService`
+ * so they benefit from the same validation and caching as all other config.
+ *
+ * Notable runtime behaviour:
+ *  - `synchronize` is enabled only in development to avoid accidental
+ *    schema mutations in staging/production.
+ *  - Queries exceeding 1 000 ms are logged regardless of environment.
+ *  - Column and table names are mapped to snake_case via `SnakeNamingStrategy`.
+ *  - The connection pool allows up to 50 connections per process with an
+ *    unlimited queue and a 10 s connect timeout.
+ */
 @Injectable()
 export class DatabaseConfig implements TypeOrmOptionsFactory {
   constructor(private configService: ConfigService) {}
 
+  /**
+   * Constructs and returns the TypeORM module options.
+   *
+   * @returns A fully-populated `TypeOrmModuleOptions` object ready to be
+   *          consumed by `TypeOrmModule.forRootAsync`.
+   */
   createTypeOrmOptions(): TypeOrmModuleOptions {
     const isDev = this.configService.get<string>('app.env') === 'development';
 

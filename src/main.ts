@@ -12,6 +12,18 @@ import { TransformInterceptor } from '@common/interceptors/transform.interceptor
 import { LoggingInterceptor } from '@common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from '@common/interceptors/timeout.interceptor';
 
+/**
+ * Application bootstrap function.
+ *
+ * Responsibilities:
+ *  - Creates the NestJS application instance with Winston logger.
+ *  - Applies security middleware (Helmet, compression, CORS).
+ *  - Enables weak ETags for conditional GET support.
+ *  - Configures URI-based API versioning with a global `/api` prefix.
+ *  - Registers global ValidationPipe, exception filters, and interceptors.
+ *  - Mounts the Swagger UI at `/api/docs` in non-production environments.
+ *  - Enables graceful shutdown hooks and tunes keep-alive timeouts.
+ */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 

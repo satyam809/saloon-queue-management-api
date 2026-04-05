@@ -22,6 +22,13 @@ import { SalonStatus } from '@common/enums/status.enum';
 import { Permission } from '@common/enums/permission.enum';
 import { canPerform } from '@common/rbac/rbac.util';
 
+/**
+ * Business logic service for salon management.
+ *
+ * Handles all CRUD operations, status transitions (approve, reject, archive),
+ * and access-control enforcement for salon records. Exported so that other
+ * modules can use {@link findEntityOrFail} for FK validation.
+ */
 @Injectable()
 export class SalonService {
   constructor(
@@ -31,6 +38,16 @@ export class SalonService {
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a new salon in PENDING status owned by the requester.
+   *
+   * A unique URL-safe slug is generated from the salon name. The salon must
+   * be approved by onboarding staff before it becomes publicly visible.
+   *
+   * @param dto - Salon creation payload.
+   * @param requester - JWT payload of the authenticated owner.
+   * @returns The persisted salon mapped to {@link SalonResponseDto}.
+   */
   async create(dto: CreateSalonDto, requester: JwtPayload): Promise<SalonResponseDto> {
     const slug = await this.generateUniqueSlug(dto.name);
 
@@ -62,6 +79,17 @@ export class SalonService {
 
   // ─── Read: public list ────────────────────────────────────────────────────
 
+  /**
+   * Returns a paginated list of salons filtered by the caller's access level.
+   *
+   * - Unauthenticated callers: only ACTIVE salons.
+   * - SUPER_ADMIN / ONBOARDING_STAFF: all statuses (optional `query.status` filter).
+   * - SALON_OWNER: their own salons in any status.
+   *
+   * @param query - Pagination, search, status filter, and sort options.
+   * @param requester - Optional JWT payload; absent for public/unauthenticated requests.
+   * @returns Paginated list of salons mapped to {@link SalonResponseDto}.
+   */
   async findAll(
     query: SalonQueryDto,
     requester?: JwtPayload,
@@ -112,6 +140,14 @@ export class SalonService {
 
   // ─── Read: single salon ───────────────────────────────────────────────────
 
+  /**
+   * Retrieves a single salon by ID, enforcing read-access rules.
+   *
+   * @param id - UUID of the salon.
+   * @param requester - Optional JWT payload of the caller.
+   * @returns The salon mapped to {@link SalonResponseDto}.
+   * @throws NotFoundException when the salon does not exist or the caller lacks read access.
+   */
   async findOne(id: string, requester?: JwtPayload): Promise<SalonResponseDto> {
     const salon = await this.findEntityOrFail(id);
     this.assertReadAccess(salon, requester);
@@ -120,6 +156,18 @@ export class SalonService {
 
   // ─── Update: owner or admin ───────────────────────────────────────────────
 
+  /**
+   * Updates editable fields of a salon. Regenerates the slug if the name changes.
+   *
+   * Owners may only update salons in ACTIVE, INACTIVE, or PENDING status.
+   *
+   * @param id - UUID of the salon to update.
+   * @param dto - Partial update payload.
+   * @param requester - JWT payload of the caller.
+   * @returns The updated salon mapped to {@link SalonResponseDto}.
+   * @throws ForbiddenException when the caller lacks write access.
+   * @throws BadRequestException when the salon status prevents owner updates.
+   */
   async update(
     id: string,
     dto: UpdateSalonDto,
@@ -151,6 +199,18 @@ export class SalonService {
 
   // ─── Approve ─────────────────────────────────────────────────────────────
 
+  /**
+   * Approves a PENDING salon, transitioning it to ACTIVE status.
+   *
+   * Records the verifier's user ID and the timestamp of verification.
+   * Clears any previously set rejection reason.
+   *
+   * @param id - UUID of the salon to approve.
+   * @param dto - Optional approval note.
+   * @param requester - JWT payload of the onboarding staff or super admin.
+   * @returns The approved salon mapped to {@link SalonResponseDto}.
+   * @throws BadRequestException when the salon is not in PENDING status.
+   */
   async approve(
     id: string,
     dto: ApproveSalonDto,
@@ -175,6 +235,17 @@ export class SalonService {
 
   // ─── Reject ───────────────────────────────────────────────────────────────
 
+  /**
+   * Rejects a PENDING salon, transitioning it to REJECTED status.
+   *
+   * Stores the rejection reason on the salon record for the owner to review.
+   *
+   * @param id - UUID of the salon to reject.
+   * @param dto - Rejection reason payload.
+   * @param requester - JWT payload of the onboarding staff or super admin.
+   * @returns The rejected salon mapped to {@link SalonResponseDto}.
+   * @throws BadRequestException when the salon is not in PENDING status.
+   */
   async reject(
     id: string,
     dto: RejectSalonDto,
@@ -197,6 +268,17 @@ export class SalonService {
 
   // ─── Archive (soft status change, owner or admin) ─────────────────────────
 
+  /**
+   * Transitions a salon to ARCHIVED status (reversible soft status change).
+   *
+   * The record is preserved; the salon is removed from public listings but
+   * not from the database.
+   *
+   * @param id - UUID of the salon to archive.
+   * @param requester - JWT payload of the caller.
+   * @throws BadRequestException when the salon is already archived.
+   * @throws ForbiddenException when the caller lacks write access.
+   */
   async archive(id: string, requester: JwtPayload): Promise<void> {
     const salon = await this.findEntityOrFail(id);
     this.assertWriteAccess(salon, requester);
@@ -211,6 +293,16 @@ export class SalonService {
 
   // ─── Hard soft-delete (SUPER_ADMIN only) ─────────────────────────────────
 
+  /**
+   * Soft-deletes a salon by setting `deletedAt`.
+   *
+   * The row is retained for historical reference but is excluded from all
+   * standard queries. Only SUPER_ADMIN may call this operation.
+   *
+   * @param id - UUID of the salon to delete.
+   * @param requester - JWT payload of the super admin.
+   * @throws ForbiddenException when the caller is not SUPER_ADMIN.
+   */
   async remove(id: string, requester: JwtPayload): Promise<void> {
     const salon = await this.findEntityOrFail(id);
 
@@ -223,6 +315,16 @@ export class SalonService {
 
   // ─── Internal (used by other modules) ────────────────────────────────────
 
+  /**
+   * Loads a {@link Salon} entity by primary key or throws {@link NotFoundException}.
+   *
+   * Intended for use by this service and by other modules that need to validate
+   * a salon FK (e.g. BarberModule, ServiceModule) without duplicating lookup logic.
+   *
+   * @param id - UUID of the salon.
+   * @returns The found {@link Salon} entity.
+   * @throws NotFoundException when no salon with the given ID exists.
+   */
   async findEntityOrFail(id: string): Promise<Salon> {
     const salon = await this.salonRepo.findOne({ where: { id } });
     if (!salon) throw new NotFoundException('Salon not found');
@@ -231,6 +333,18 @@ export class SalonService {
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
+  /**
+   * Asserts the requester has read access to the given salon.
+   *
+   * - ACTIVE salons are publicly readable.
+   * - Unauthenticated callers receive a 404 for non-active salons (to avoid leaking existence).
+   * - SUPER_ADMIN and ONBOARDING_STAFF can read any salon.
+   * - SALON_OWNER can read their own salon regardless of status.
+   *
+   * @param salon - The salon entity to check.
+   * @param requester - Optional JWT payload of the caller.
+   * @throws NotFoundException when the caller lacks read access.
+   */
   private assertReadAccess(salon: Salon, requester?: JwtPayload): void {
     // Active salons are publicly readable
     if (salon.status === SalonStatus.ACTIVE) return;
@@ -256,6 +370,10 @@ export class SalonService {
    * SUPER_ADMIN → always allowed.
    * SALON_OWNER → only their own salon.
    * Others      → forbidden.
+   *
+   * @param salon - The salon entity to check.
+   * @param requester - JWT payload of the caller.
+   * @throws ForbiddenException when the caller is not the owner and not SUPER_ADMIN.
    */
   private assertWriteAccess(salon: Salon, requester: JwtPayload): void {
     if (requester.role === Role.SUPER_ADMIN) return;
@@ -273,6 +391,10 @@ export class SalonService {
   /**
    * Converts a salon name into a URL-safe slug and appends a numeric suffix
    * if the base slug is already taken.
+   *
+   * @param name - The human-readable salon name to slugify.
+   * @param excludeId - Optional salon UUID to exclude from the uniqueness check (used on update).
+   * @returns A unique slug string safe for use in URLs.
    */
   private async generateUniqueSlug(
     name: string,

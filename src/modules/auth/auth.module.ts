@@ -9,6 +9,15 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { UserModule } from '@modules/user/user.module';
 
+/**
+ * AuthModule wires together all authentication concerns:
+ * - Passport strategies (local, JWT access, JWT refresh)
+ * - JwtModule configured with the access-token secret and TTL from config
+ * - AuthService and AuthController
+ *
+ * Exports AuthService and JwtModule so other modules (e.g. guards)
+ * can verify tokens without importing AuthModule directly.
+ */
 @Module({
   imports: [
     UserModule,

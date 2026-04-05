@@ -26,6 +26,15 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AuthResponseDto, TokensDto, AuthUserDto } from './dto/auth-response.dto';
 
+/**
+ * AuthService handles all authentication business logic:
+ * credential validation, token generation/rotation, session revocation,
+ * and the complete password management lifecycle.
+ *
+ * Token storage strategy: refresh tokens are stored in Redis with the user's
+ * ID as the key. Only the most recently issued refresh token is valid
+ * (rotation pattern). Reuse of a superseded token triggers full session invalidation.
+ */
 @Injectable()
 export class AuthService {
   constructor(
@@ -41,6 +50,10 @@ export class AuthService {
    * Returns the user if credentials are valid and account is active.
    * Returns null on any failure — never throws, so LocalStrategy controls
    * the response and avoids leaking the reason for rejection.
+   *
+   * @param email - The email address to look up
+   * @param password - The plaintext password to compare against the stored hash
+   * @returns The matching User entity, or null if credentials are invalid or account is inactive
    */
   async validateCredentials(email: string, password: string): Promise<User | null> {
     const user = await this.userService.findByEmail(email);
@@ -56,6 +69,14 @@ export class AuthService {
 
   // ─── Register ─────────────────────────────────────────────────────────────
 
+  /**
+   * Creates a new CUSTOMER account and immediately issues auth tokens.
+   * Delegates uniqueness checks to UserService.create().
+   *
+   * @param dto - Registration data (name, email, password, optional phone)
+   * @returns JWT token pair and the new user's basic profile
+   * @throws ConflictException if the email is already registered
+   */
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
     const user = await this.userService.create({
       name: dto.name,
@@ -74,6 +95,9 @@ export class AuthService {
   /**
    * Called after LocalStrategy has already validated credentials.
    * req.user at this point is the validated User entity.
+   *
+   * @param user - Validated User entity from LocalStrategy
+   * @returns JWT token pair and the user's basic profile
    */
   async login(user: User): Promise<AuthResponseDto> {
     await this.userService.updateLastLogin(user.id);
@@ -85,8 +109,11 @@ export class AuthService {
   /**
    * Called after JwtRefreshStrategy has validated the refresh token and
    * confirmed it matches Redis. Generates a new token pair (rotation).
+   * Throws if the account has been suspended or deactivated since the token was issued.
    *
    * @param payload - JWT payload from the validated refresh token
+   * @returns A new JWT access and refresh token pair
+   * @throws UnauthorizedException if the user's account is not ACTIVE
    */
   async refresh(payload: JwtPayload): Promise<TokensDto> {
     const user = await this.userService.findEntityOrFail(payload.sub);
@@ -110,6 +137,9 @@ export class AuthService {
    * Revokes the stored refresh token, effectively ending the session.
    * The short-lived access token remains valid until its natural expiry —
    * this is an accepted trade-off for stateless JWTs.
+   * Also busts the Redis status cache to force a fresh DB read on the next request.
+   *
+   * @param userId - UUID of the user whose session should be terminated
    */
   async logout(userId: string): Promise<void> {
     await Promise.all([
@@ -121,6 +151,15 @@ export class AuthService {
 
   // ─── Change password ──────────────────────────────────────────────────────
 
+  /**
+   * Validates the current password, applies the new password hash, and revokes
+   * all active sessions. The user must re-login after calling this.
+   *
+   * @param userId - UUID of the authenticated user
+   * @param dto - Current password, new password, and confirmation
+   * @throws BadRequestException if the confirmation does not match or the new password equals the current one
+   * @throws UnauthorizedException if the current password is incorrect
+   */
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('New password and confirmation do not match');
@@ -157,6 +196,8 @@ export class AuthService {
    *
    * Always returns the same success response regardless of whether the
    * email exists — prevents user enumeration.
+   *
+   * @param dto - Email address of the account requesting a password reset
    */
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
     const user = await this.userService.findByEmail(dto.email);
@@ -179,6 +220,13 @@ export class AuthService {
 
   // ─── Reset password ───────────────────────────────────────────────────────
 
+  /**
+   * Validates a one-time reset token from Redis, applies the new password hash,
+   * consumes the token to prevent reuse, and revokes all active sessions.
+   *
+   * @param dto - Reset token, new password, and confirmation
+   * @throws BadRequestException if the confirmation does not match or the token is invalid/expired
+   */
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('Password and confirmation do not match');
@@ -205,6 +253,13 @@ export class AuthService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  /**
+   * Composes the full AuthResponseDto by generating a new token pair and
+   * mapping the user entity to a safe AuthUserDto.
+   *
+   * @param user - User entity or response DTO (both share the required fields)
+   * @returns Complete auth response with tokens and user profile
+   */
   private async buildAuthResponse(user: User | UserResponseDto): Promise<AuthResponseDto> {
     const tokens = await this.generateTokens(user);
 
@@ -219,6 +274,14 @@ export class AuthService {
     return { tokens, user: userDto };
   }
 
+  /**
+   * Signs a new access token and refresh token for the given user, then
+   * overwrites the stored refresh token in Redis (token rotation).
+   * Only the most recently issued refresh token is considered valid.
+   *
+   * @param user - User entity or response DTO supplying the JWT payload fields
+   * @returns A fresh TokensDto with both tokens and their metadata
+   */
   private async generateTokens(user: User | UserResponseDto): Promise<TokensDto> {
     const payload: JwtPayload = {
       sub: user.id,
@@ -256,6 +319,9 @@ export class AuthService {
 
   /**
    * Converts a JWT duration string (e.g. '15m', '7d', '3600') to seconds.
+   *
+   * @param ttl - Duration string with optional unit suffix (s, m, h, d) or plain integer string
+   * @returns Duration in seconds
    */
   private parseTtlToSeconds(ttl: string): number {
     if (/^\d+$/.test(ttl)) return parseInt(ttl, 10);

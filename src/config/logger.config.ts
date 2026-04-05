@@ -48,6 +48,18 @@ const rotateBase = {
 
 // ─── Config export ─────────────────────────────────────────────────────────
 
+/**
+ * Winston logger configuration consumed by `WinstonModule.forRoot()` in `AppModule`.
+ *
+ * Log level is controlled by the `LOG_LEVEL` environment variable (default: `"info"`).
+ * Format switches between human-readable (development) and JSON (production) based
+ * on `NODE_ENV`.
+ *
+ * Transports:
+ *  - Console — always active; output is captured by Docker / systemd / PM2.
+ *  - `logs/error-<DATE>.log`    — error-level only, 14-day retention.
+ *  - `logs/combined-<DATE>.log` — all levels,       30-day retention.
+ */
 export const winstonConfig: winston.LoggerOptions = {
   level:  process.env.LOG_LEVEL ?? 'info',
   format: isDev ? devFormat : prodFormat,
