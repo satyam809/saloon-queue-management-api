@@ -5,6 +5,7 @@ import {
   IsString,
   IsUrl,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@common/enums/role.enum';
@@ -51,4 +52,11 @@ export class AdminUpdateUserDto {
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
+
+  @ApiPropertyOptional({ example: 'NewP@ssword1', description: 'Reset user password' })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  newPassword?: string;
 }

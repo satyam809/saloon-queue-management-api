@@ -14,7 +14,7 @@ import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { SuspendUserDto } from './dto/suspend-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserResponseDto } from './dto/user-response.dto';
-import { hashPassword } from '@shared/utils/hash.util';
+import { comparePassword, hashPassword } from '@shared/utils/hash.util';
 import { paginate } from '@shared/utils/pagination.util';
 import { PaginatedResult } from '@common/interfaces/paginated-result.interface';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
@@ -131,7 +131,16 @@ export class UserService {
       await this.assertPhoneUnique(dto.phone, userId);
     }
 
-    Object.assign(user, dto);
+    if (dto.newPassword) {
+      const valid = await comparePassword(dto.currentPassword!, user.passwordHash);
+      if (!valid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
+      user.passwordHash = await hashPassword(dto.newPassword);
+    }
+
+    const { currentPassword: _cp, newPassword: _np, ...profileFields } = dto;
+    Object.assign(user, profileFields);
     return UserResponseDto.from(await this.userRepo.save(user));
   }
 
@@ -161,7 +170,12 @@ export class UserService {
       await this.assertPhoneUnique(dto.phone, id);
     }
 
-    Object.assign(user, dto);
+    if (dto.newPassword) {
+      user.passwordHash = await hashPassword(dto.newPassword);
+    }
+
+    const { newPassword: _np, ...fields } = dto;
+    Object.assign(user, fields);
     return UserResponseDto.from(await this.userRepo.save(user));
   }
 

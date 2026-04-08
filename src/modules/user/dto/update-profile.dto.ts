@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -24,4 +24,17 @@ export class UpdateProfileDto {
   @IsUrl({}, { message: 'avatarUrl must be a valid URL' })
   @MaxLength(500)
   avatarUrl?: string;
+
+  @ApiPropertyOptional({ example: 'OldP@ssword1', description: 'Current password — required when changing password' })
+  @ValidateIf((o) => o.newPassword !== undefined)
+  @IsString()
+  @MinLength(1)
+  currentPassword?: string;
+
+  @ApiPropertyOptional({ example: 'NewP@ssword1', description: 'New password — requires currentPassword to be provided' })
+  @ValidateIf((o) => o.currentPassword !== undefined)
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  newPassword?: string;
 }
