@@ -28,6 +28,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     Permission.USER_READ_ALL,
     Permission.USER_READ_OWN,
     Permission.USER_UPDATE_OWN,
+    Permission.SALON_CREATE,
     Permission.SALON_READ_ALL,
     Permission.SALON_VERIFY,
     Permission.ANALYTICS_READ_ALL,
