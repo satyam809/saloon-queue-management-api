@@ -98,22 +98,23 @@ export class SalonService {
       .createQueryBuilder('salon')
       .where('salon.deletedAt IS NULL');
 
-    // Public (unauthenticated) callers see only active salons.
-    // Admins / onboarding staff can see all statuses.
-    const canSeeAll =
-      requester &&
-      (requester.role === Role.SUPER_ADMIN ||
-        requester.role === Role.ONBOARDING_STAFF);
-
-    if (!canSeeAll) {
-      qb.andWhere('salon.status = :active', { active: SalonStatus.ACTIVE });
-    } else if (query.status) {
-      qb.andWhere('salon.status = :status', { status: query.status });
-    }
-
-    // SALON_OWNER sees only their own salons (regardless of status)
-    if (requester?.role === Role.SALON_OWNER) {
+    if (requester?.role === Role.SUPER_ADMIN) {
+      // Super admin sees every salon; optional status filter
+      if (query.status) {
+        qb.andWhere('salon.status = :status', { status: query.status });
+      }
+    } else if (
+      requester?.role === Role.ONBOARDING_STAFF ||
+      requester?.role === Role.SALON_OWNER
+    ) {
+      // Onboarding staff and salon owners see only their own salons
       qb.andWhere('salon.ownerId = :ownerId', { ownerId: requester.sub });
+      if (query.status) {
+        qb.andWhere('salon.status = :status', { status: query.status });
+      }
+    } else {
+      // Unauthenticated / other roles see only active salons
+      qb.andWhere('salon.status = :active', { active: SalonStatus.ACTIVE });
     }
 
     if (query.search?.trim()) {
