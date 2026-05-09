@@ -1,6 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SalonStatus } from '@common/enums/status.enum';
+import { Role } from '@common/enums/role.enum';
 import { Salon } from '../entities/salon.entity';
+
+export class OwnerDto {
+  @ApiProperty() id: string;
+  @ApiProperty() name: string;
+  @ApiProperty() email: string;
+  @ApiPropertyOptional() phone: string | null;
+  @ApiPropertyOptional() avatarUrl: string | null;
+  @ApiProperty({ enum: Role }) role: Role;
+}
 
 /**
  * Outbound DTO representing a salon resource in API responses.
@@ -16,6 +26,9 @@ export class SalonResponseDto {
 
   /** UUID of the user account that owns this salon. */
   @ApiProperty() ownerId: string;
+
+  /** Owner details. Null when the relation was not loaded. */
+  @ApiPropertyOptional({ type: OwnerDto }) owner: OwnerDto | null;
 
   /**
    * UUID of the staff member who verified the salon during onboarding,
@@ -130,6 +143,9 @@ export class SalonResponseDto {
     const dto = new SalonResponseDto();
     dto.id                        = salon.id;
     dto.ownerId                   = salon.ownerId;
+    dto.owner                     = salon.owner
+      ? { id: salon.owner.id, name: salon.owner.name, email: salon.owner.email, phone: salon.owner.phone, avatarUrl: salon.owner.avatarUrl, role: salon.owner.role }
+      : null;
     dto.verifiedBy                = salon.verifiedBy;
     dto.name                      = salon.name;
     dto.slug                      = salon.slug;

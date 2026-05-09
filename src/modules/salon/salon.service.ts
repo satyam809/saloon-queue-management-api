@@ -96,8 +96,8 @@ export class SalonService {
   ): Promise<PaginatedResult<SalonResponseDto>> {
     const qb = this.salonRepo
       .createQueryBuilder('salon')
+      .leftJoinAndSelect('salon.owner', 'owner')
       .where('salon.deletedAt IS NULL');
-
     if (requester?.role === Role.SUPER_ADMIN) {
       // Super admin sees every salon; optional status filter
       if (query.status) {
@@ -327,7 +327,7 @@ export class SalonService {
    * @throws NotFoundException when no salon with the given ID exists.
    */
   async findEntityOrFail(id: string): Promise<Salon> {
-    const salon = await this.salonRepo.findOne({ where: { id } });
+    const salon = await this.salonRepo.findOne({ where: { id }, relations: { owner: true } });
     if (!salon) throw new NotFoundException('Salon not found');
     return salon;
   }
