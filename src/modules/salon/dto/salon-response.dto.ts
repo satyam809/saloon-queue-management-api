@@ -24,11 +24,11 @@ export class SalonResponseDto {
   /** Unique identifier (UUID) of the salon record. */
   @ApiProperty() id: string;
 
-  /** UUID of the user account that owns this salon. */
-  @ApiProperty() ownerId: string;
+  /** UUID of the user who added/registered this salon. */
+  @ApiProperty() addedById: string;
 
-  /** Owner details. Null when the relation was not loaded. */
-  @ApiPropertyOptional({ type: OwnerDto }) owner: OwnerDto | null;
+  /** Details of the user who added this salon. Null when the relation was not loaded. */
+  @ApiPropertyOptional({ type: OwnerDto }) addedBy: OwnerDto | null;
 
   /**
    * UUID of the staff member who verified the salon during onboarding,
@@ -142,9 +142,9 @@ export class SalonResponseDto {
   static from(salon: Salon): SalonResponseDto {
     const dto = new SalonResponseDto();
     dto.id                        = salon.id;
-    dto.ownerId                   = salon.ownerId;
-    dto.owner                     = salon.owner
-      ? { id: salon.owner.id, name: salon.owner.name, email: salon.owner.email, phone: salon.owner.phone, avatarUrl: salon.owner.avatarUrl, role: salon.owner.role }
+    dto.addedById                 = salon.addedById;
+    dto.addedBy                   = salon.addedBy
+      ? { id: salon.addedBy.id, name: salon.addedBy.name, email: salon.addedBy.email, phone: salon.addedBy.phone, avatarUrl: salon.addedBy.avatarUrl, role: salon.addedBy.role }
       : null;
     dto.verifiedBy                = salon.verifiedBy;
     dto.name                      = salon.name;

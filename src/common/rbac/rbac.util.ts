@@ -9,7 +9,7 @@ import { ROLE_PERMISSIONS } from './role-permissions.map';
  * @example
  * // Service layer ownership check
  * if (!canPerform(requester.role, Permission.SALON_UPDATE_ANY)) {
- *   if (salon.ownerId !== requester.sub) {
+ *   if (salon.addedById !== requester.sub) {
  *     throw new ForbiddenException('You can only update your own salon');
  *   }
  * }

@@ -52,7 +52,7 @@ export class QueueService {
   async openQueue(dto: CreateQueueDto, requester: JwtPayload): Promise<QueueResponseDto> {
     const salon = await this.salonService.findEntityOrFail(dto.salonId);
 
-    if (requester.role === Role.SALON_OWNER && salon.ownerId !== requester.sub) {
+    if (requester.role === Role.SALON_OWNER && salon.addedById !== requester.sub) {
       throw new ForbiddenException('You can only open a queue for your own salon');
     }
 

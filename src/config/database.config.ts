@@ -59,7 +59,7 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
       database: this.configService.get<string>('database.name'),
       entities:   [__dirname + '/../**/*.entity{.ts,.js}'],
       migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
-      synchronize: isDev,
+      synchronize: false,
       // In production log only slow queries (≥ 1 s).  In dev log everything.
       logging:     isDev ? true : ['warn', 'error'],
       maxQueryExecutionTime: 1000,   // ms — log any query that exceeds this

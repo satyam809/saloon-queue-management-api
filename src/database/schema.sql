@@ -62,7 +62,7 @@ CREATE INDEX idx_users_email_active   ON users (email, deleted_at);
 -- =============================================================================
 CREATE TABLE salons (
   id                          CHAR(36)        NOT NULL,
-  owner_id                    CHAR(36)        NOT NULL,
+  added_by                    CHAR(36)        NOT NULL,
   name                        VARCHAR(150)    NOT NULL,
   slug                        VARCHAR(160)    NOT NULL,           -- URL-friendly unique name
   description                 TEXT            NULL,
@@ -101,11 +101,11 @@ CREATE TABLE salons (
 
   CONSTRAINT pk_salons PRIMARY KEY (id),
   CONSTRAINT uq_salons_slug UNIQUE (slug),
-  CONSTRAINT fk_salons_owner FOREIGN KEY (owner_id)     REFERENCES users (id),
+  CONSTRAINT fk_salons_owner FOREIGN KEY (added_by)     REFERENCES users (id),
   CONSTRAINT fk_salons_verifier FOREIGN KEY (verified_by) REFERENCES users (id)
 );
 
-CREATE INDEX idx_salons_owner_id      ON salons (owner_id);
+CREATE INDEX idx_salons_added_by      ON salons (added_by);
 CREATE INDEX idx_salons_status        ON salons (status);
 CREATE INDEX idx_salons_city          ON salons (city);
 CREATE INDEX idx_salons_deleted_at    ON salons (deleted_at);

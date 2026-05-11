@@ -33,14 +33,14 @@ import type { Review } from '@modules/review/entities/review.entity';
 @Index(['latitude', 'longitude'])        // geo-proximity queries
 export class Salon extends BaseEntity {
 
-  /** UUID of the user who owns this salon. */
-  @Column({ type: 'varchar' })
-  ownerId: string;
+  /** UUID of the user who added/registered this salon. */
+  @Column({ type: 'varchar', name: 'added_by' })
+  addedById: string;
 
-  /** The user who registered and owns this salon. */
+  /** The user who added/registered this salon. */
   @ManyToOne('User', (user: User) => user.ownedSalons)
-  @JoinColumn({ name: 'owner_id' })
-  owner: User;
+  @JoinColumn({ name: 'added_by' })
+  addedBy: User;
 
   /** UUID of the onboarding staff member who approved this salon (null if not yet approved). */
   // Onboarding staff who approved this salon

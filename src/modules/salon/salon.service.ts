@@ -52,7 +52,7 @@ export class SalonService {
     const slug = await this.generateUniqueSlug(dto.name);
 
     const salon = this.salonRepo.create({
-      ownerId:                  requester.sub,
+      addedById:                requester.sub,
       name:                     dto.name,
       slug,
       description:              dto.description ?? null,
@@ -96,7 +96,7 @@ export class SalonService {
   ): Promise<PaginatedResult<SalonResponseDto>> {
     const qb = this.salonRepo
       .createQueryBuilder('salon')
-      .leftJoinAndSelect('salon.owner', 'owner')
+      .leftJoinAndSelect('salon.addedBy', 'addedBy')
       .where('salon.deletedAt IS NULL');
     if (requester?.role === Role.SUPER_ADMIN) {
       // Super admin sees every salon; optional status filter
@@ -108,7 +108,7 @@ export class SalonService {
       requester?.role === Role.SALON_OWNER
     ) {
       // Onboarding staff and salon owners see only their own salons
-      qb.andWhere('salon.ownerId = :ownerId', { ownerId: requester.sub });
+      qb.andWhere('salon.addedById = :addedById', { addedById: requester.sub });
       if (query.status) {
         qb.andWhere('salon.status = :status', { status: query.status });
       }
@@ -327,7 +327,7 @@ export class SalonService {
    * @throws NotFoundException when no salon with the given ID exists.
    */
   async findEntityOrFail(id: string): Promise<Salon> {
-    const salon = await this.salonRepo.findOne({ where: { id }, relations: { owner: true } });
+    const salon = await this.salonRepo.findOne({ where: { id }, relations: { addedBy: true } });
     if (!salon) throw new NotFoundException('Salon not found');
     return salon;
   }
@@ -361,7 +361,7 @@ export class SalonService {
     if (role === Role.SUPER_ADMIN || role === Role.ONBOARDING_STAFF) return;
 
     // Salon owner can see their own salon regardless of status
-    if (role === Role.SALON_OWNER && salon.ownerId === requester.sub) return;
+    if (role === Role.SALON_OWNER && salon.addedById === requester.sub) return;
 
     throw new NotFoundException('Salon not found');
   }
@@ -381,7 +381,7 @@ export class SalonService {
 
     if (
       canPerform(requester.role, Permission.SALON_UPDATE_OWN) &&
-      salon.ownerId === requester.sub
+      salon.addedById === requester.sub
     ) {
       return;
     }

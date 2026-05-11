@@ -110,10 +110,10 @@ export class User extends BaseEntity {
   // ─── Relationships ───────────────────────────────────────────────────────
 
   /**
-   * Salons that this user owns.
-   * Inverse side of {@link Salon.owner}.
+   * Salons added/registered by this user.
+   * Inverse side of {@link Salon.addedBy}.
    */
-  @OneToMany('Salon', (salon: Salon) => salon.owner)
+  @OneToMany('Salon', (salon: Salon) => salon.addedBy)
   ownedSalons: Salon[];
 
   /**

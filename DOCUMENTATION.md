@@ -282,7 +282,7 @@ Table: `salons`
 
 | Column | Type | Notes |
 |---|---|---|
-| `owner_id` | UUID FK | References `users` |
+| `added_by` | UUID FK | References `users` |
 | `name` | varchar(150) | |
 | `slug` | varchar | Unique, URL-safe, auto-generated from name |
 | `description` | text | nullable |
