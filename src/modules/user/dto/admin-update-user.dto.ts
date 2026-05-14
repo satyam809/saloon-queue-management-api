@@ -59,4 +59,10 @@ export class AdminUpdateUserDto {
   @MinLength(8)
   @MaxLength(72)
   newPassword?: string;
+
+  @ApiPropertyOptional({ example: 'Repeated policy violations', description: 'Required when setting status to SUSPENDED' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  suspendReason?: string;
 }

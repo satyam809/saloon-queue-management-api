@@ -11,7 +11,6 @@ import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
-import { SuspendUserDto } from './dto/suspend-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { comparePassword, hashPassword } from '@shared/utils/hash.util';
@@ -153,14 +152,24 @@ export class UserService {
   ): Promise<UserResponseDto> {
     const user = await this.findEntityOrFail(id);
 
-    // Prevent privilege escalation — only SUPER_ADMIN can assign SUPER_ADMIN role
     if (dto.role === Role.SUPER_ADMIN && requester.role !== Role.SUPER_ADMIN) {
       throw new ForbiddenException('Only SUPER_ADMIN can assign the SUPER_ADMIN role');
     }
-
-    // Prevent modifying another SUPER_ADMIN (unless you are one)
     if (user.role === Role.SUPER_ADMIN && requester.role !== Role.SUPER_ADMIN) {
       throw new ForbiddenException('Cannot modify a SUPER_ADMIN account');
+    }
+
+    if (dto.status === UserStatus.SUSPENDED) {
+      if (user.id === requester.sub) {
+        throw new BadRequestException('You cannot suspend your own account');
+      }
+      if (user.status === UserStatus.SUSPENDED) {
+        throw new BadRequestException('User is already suspended');
+      }
+    }
+
+    if (dto.status === UserStatus.ACTIVE && user.status === UserStatus.ACTIVE) {
+      throw new BadRequestException('User is already active');
     }
 
     if (dto.email && dto.email !== user.email) {
@@ -174,56 +183,9 @@ export class UserService {
       user.passwordHash = await hashPassword(dto.newPassword);
     }
 
-    const { newPassword: _np, ...fields } = dto;
+    const { newPassword: _np, suspendReason: _sr, ...fields } = dto;
     Object.assign(user, fields);
     return UserResponseDto.from(await this.userRepo.save(user));
-  }
-
-  // ─── Status management ────────────────────────────────────────────────────
-
-  async suspend(
-    id: string,
-    dto: SuspendUserDto,
-    requester: JwtPayload,
-  ): Promise<void> {
-    const user = await this.findEntityOrFail(id);
-
-    if (user.id === requester.sub) {
-      throw new BadRequestException('You cannot suspend your own account');
-    }
-    if (user.role === Role.SUPER_ADMIN && requester.role !== Role.SUPER_ADMIN) {
-      throw new ForbiddenException('Cannot suspend a SUPER_ADMIN account');
-    }
-    if (user.status === UserStatus.SUSPENDED) {
-      throw new BadRequestException('User is already suspended');
-    }
-
-    user.status = UserStatus.SUSPENDED;
-    await this.userRepo.save(user);
-
-    // TODO: inject ActivityLogService and log:
-    // await this.activityLogService.log({
-    //   userId: requester.sub,
-    //   action: 'user.suspended',
-    //   entityType: 'user',
-    //   entityId: id,
-    //   oldValues: { status: UserStatus.ACTIVE },
-    //   newValues: { status: UserStatus.SUSPENDED, reason: dto.reason },
-    // });
-  }
-
-  async activate(id: string, requester: JwtPayload): Promise<void> {
-    const user = await this.findEntityOrFail(id);
-
-    if (user.status === UserStatus.ACTIVE) {
-      throw new BadRequestException('User is already active');
-    }
-    if (user.role === Role.SUPER_ADMIN && requester.role !== Role.SUPER_ADMIN) {
-      throw new ForbiddenException('Cannot modify a SUPER_ADMIN account');
-    }
-
-    user.status = UserStatus.ACTIVE;
-    await this.userRepo.save(user);
   }
 
   // ─── Delete ───────────────────────────────────────────────────────────────

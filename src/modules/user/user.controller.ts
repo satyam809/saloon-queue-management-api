@@ -7,8 +7,8 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
-  Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -30,7 +30,6 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
-import { SuspendUserDto } from './dto/suspend-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
@@ -62,17 +61,12 @@ export class UserController {
     return this.userService.findMe(userId);
   }
 
-  /**
-   * PATCH /users/me
-   * Users can update their own name, phone, and avatar.
-   * Role, status, and email are excluded — those require admin action.
-   */
-  @Patch('me')
+  @Put('me')
   @ApiOperation({
     summary: 'Update own profile (name, phone, avatarUrl)',
     description:
       'Users can only change name, phone, and avatarUrl. ' +
-      'To change email or role, an admin must use PATCH /users/:id.',
+      'To change email or role, an admin must use PUT /users/:id.',
   })
   @ApiOkWrapped(UserResponseDto)
   @ApiCommonErrors()
@@ -152,17 +146,14 @@ export class UserController {
     return this.userService.findOne(id, requester);
   }
 
-  /**
-   * PATCH /users/:id
-   * Admins can update any editable field — name, email, phone, role, status.
-   * The service enforces privilege-escalation guards.
-   */
-  @Patch(':id')
+  @Put(':id')
   @RequirePermissions(Permission.USER_UPDATE_ANY)
   @ApiOperation({
     summary: 'Admin: update any user\'s account fields',
     description:
       'Allows changing role, status, email, name, phone. ' +
+      'Set status=SUSPENDED with optional suspendReason to suspend; ' +
+      'set status=ACTIVE to reactivate. ' +
       'Only SUPER_ADMIN can assign or modify SUPER_ADMIN accounts.',
   })
   @ApiParam({ name: 'id', description: 'User UUID' })
@@ -174,51 +165,6 @@ export class UserController {
     @CurrentUser() requester: JwtPayload,
   ): Promise<UserResponseDto> {
     return this.userService.adminUpdate(id, dto, requester);
-  }
-
-  // ─── Status management ────────────────────────────────────────────────────
-
-  /**
-   * PATCH /users/:id/suspend
-   * Records a reason in the activity log and sets status=SUSPENDED.
-   * The user will be blocked within 60 s (Redis status cache TTL).
-   */
-  @Patch(':id/suspend')
-  @RequirePermissions(Permission.USER_SUSPEND)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({
-    summary: 'Suspend a user account',
-    description:
-      'Sets status to SUSPENDED and logs the reason. ' +
-      'User is locked out within 60 s (Redis cache TTL).',
-  })
-  @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiNoContentResponse({ description: 'Account suspended.' })
-  @ApiCommonErrors()
-  suspend(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: SuspendUserDto,
-    @CurrentUser() requester: JwtPayload,
-  ): Promise<void> {
-    return this.userService.suspend(id, dto, requester);
-  }
-
-  /**
-   * PATCH /users/:id/activate
-   * Re-activates a suspended or inactive account.
-   */
-  @Patch(':id/activate')
-  @RequirePermissions(Permission.USER_SUSPEND)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Activate (or re-activate) a user account' })
-  @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiNoContentResponse({ description: 'Account activated.' })
-  @ApiCommonErrors()
-  activate(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() requester: JwtPayload,
-  ): Promise<void> {
-    return this.userService.activate(id, requester);
   }
 
   // ─── Delete ───────────────────────────────────────────────────────────────
