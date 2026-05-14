@@ -10,8 +10,6 @@ import { Repository } from 'typeorm';
 import { Salon } from './entities/salon.entity';
 import { CreateSalonDto } from './dto/create-salon.dto';
 import { UpdateSalonDto } from './dto/update-salon.dto';
-import { ApproveSalonDto } from './dto/approve-salon.dto';
-import { RejectSalonDto } from './dto/reject-salon.dto';
 import { SalonQueryDto } from './dto/salon-query.dto';
 import { SalonResponseDto } from './dto/salon-response.dto';
 import { paginate } from '@shared/utils/pagination.util';
@@ -21,6 +19,7 @@ import { Role } from '@common/enums/role.enum';
 import { SalonStatus } from '@common/enums/status.enum';
 import { Permission } from '@common/enums/permission.enum';
 import { canPerform } from '@common/rbac/rbac.util';
+import { UploadService } from '@modules/upload/upload.service';
 
 /**
  * Business logic service for salon management.
@@ -34,6 +33,7 @@ export class SalonService {
   constructor(
     @InjectRepository(Salon)
     private readonly salonRepo: Repository<Salon>,
+    private readonly uploadService: UploadService,
   ) {}
 
   // ─── Create ───────────────────────────────────────────────────────────────
@@ -155,141 +155,96 @@ export class SalonService {
     return SalonResponseDto.from(salon);
   }
 
-  // ─── Update: owner or admin ───────────────────────────────────────────────
+  // ─── Update (data + images + status transitions) ─────────────────────────
 
   /**
-   * Updates editable fields of a salon. Regenerates the slug if the name changes.
+   * Unified update: edits salon fields, replaces images, and/or transitions status —
+   * all in one request. Authorization is checked contextually:
    *
-   * Owners may only update salons in ACTIVE, INACTIVE, or PENDING status.
-   *
-   * @param id - UUID of the salon to update.
-   * @param dto - Partial update payload.
-   * @param requester - JWT payload of the caller.
-   * @returns The updated salon mapped to {@link SalonResponseDto}.
-   * @throws ForbiddenException when the caller lacks write access.
-   * @throws BadRequestException when the salon status prevents owner updates.
+   * - Status → ACTIVE (approve): ONBOARDING_STAFF or SUPER_ADMIN; salon must be PENDING.
+   * - Status → REJECTED: ONBOARDING_STAFF or SUPER_ADMIN; salon must be PENDING; rejectionReason required.
+   * - Status → ARCHIVED: owner or SUPER_ADMIN; salon must not already be ARCHIVED.
+   * - Field/image updates: owner (ACTIVE/INACTIVE/PENDING only) or SUPER_ADMIN.
    */
   async update(
     id: string,
     dto: UpdateSalonDto,
-    requester: JwtPayload,
-  ): Promise<SalonResponseDto> {
-    const salon = await this.findEntityOrFail(id);
-    this.assertWriteAccess(salon, requester);
-
-    // Owners can only update active or inactive salons (not suspended/archived)
-    if (
-      requester.role === Role.SALON_OWNER &&
-      salon.status !== SalonStatus.ACTIVE &&
-      salon.status !== SalonStatus.INACTIVE &&
-      salon.status !== SalonStatus.PENDING
-    ) {
-      throw new BadRequestException(
-        `Cannot update a salon with status: ${salon.status}`,
-      );
-    }
-
-    // Regenerate slug only if name changed
-    if (dto.name && dto.name !== salon.name) {
-      salon.slug = await this.generateUniqueSlug(dto.name, id);
-    }
-
-    Object.assign(salon, dto);
-    return SalonResponseDto.from(await this.salonRepo.save(salon));
-  }
-
-  // ─── Approve ─────────────────────────────────────────────────────────────
-
-  /**
-   * Approves a PENDING salon, transitioning it to ACTIVE status.
-   *
-   * Records the verifier's user ID and the timestamp of verification.
-   * Clears any previously set rejection reason.
-   *
-   * @param id - UUID of the salon to approve.
-   * @param dto - Optional approval note.
-   * @param requester - JWT payload of the onboarding staff or super admin.
-   * @returns The approved salon mapped to {@link SalonResponseDto}.
-   * @throws BadRequestException when the salon is not in PENDING status.
-   */
-  async approve(
-    id: string,
-    dto: ApproveSalonDto,
+    files: { logo?: Express.Multer.File[]; cover?: Express.Multer.File[] },
     requester: JwtPayload,
   ): Promise<SalonResponseDto> {
     const salon = await this.findEntityOrFail(id);
 
-    if (salon.status !== SalonStatus.PENDING) {
-      throw new BadRequestException(
-        `Only PENDING salons can be approved. Current status: ${salon.status}`,
-      );
+    if (dto.status) {
+      this.applyStatusTransition(salon, dto, requester);
     }
 
-    salon.status         = SalonStatus.ACTIVE;
-    salon.isVerified     = true;
-    salon.verifiedBy     = requester.sub;
-    salon.verifiedAt     = new Date();
-    salon.rejectionReason = null;
+    const { status, rejectionReason, ...fields } = dto;
+
+    if (Object.keys(fields).length || files?.logo?.[0] || files?.cover?.[0]) {
+      this.assertWriteAccess(salon, requester);
+
+      if (
+        requester.role === Role.SALON_OWNER &&
+        salon.status !== SalonStatus.ACTIVE &&
+        salon.status !== SalonStatus.INACTIVE &&
+        salon.status !== SalonStatus.PENDING
+      ) {
+        throw new BadRequestException(`Cannot update a salon with status: ${salon.status}`);
+      }
+
+      if (fields.name && fields.name !== salon.name) {
+        salon.slug = await this.generateUniqueSlug(fields.name, id);
+      }
+
+      Object.assign(salon, fields);
+
+      if (files?.logo?.[0]) {
+        if (salon.logoUrl?.startsWith('/uploads/')) this.uploadService.deleteFile(salon.logoUrl);
+        salon.logoUrl = `/uploads/salons/${files.logo[0].filename}`;
+      }
+
+      if (files?.cover?.[0]) {
+        if (salon.coverImageUrl?.startsWith('/uploads/')) this.uploadService.deleteFile(salon.coverImageUrl);
+        salon.coverImageUrl = `/uploads/salons/${files.cover[0].filename}`;
+      }
+    }
 
     return SalonResponseDto.from(await this.salonRepo.save(salon));
   }
 
-  // ─── Reject ───────────────────────────────────────────────────────────────
+  private applyStatusTransition(salon: Salon, dto: UpdateSalonDto, requester: JwtPayload): void {
+    const isStaffOrAdmin =
+      requester.role === Role.ONBOARDING_STAFF || requester.role === Role.SUPER_ADMIN;
 
-  /**
-   * Rejects a PENDING salon, transitioning it to REJECTED status.
-   *
-   * Stores the rejection reason on the salon record for the owner to review.
-   *
-   * @param id - UUID of the salon to reject.
-   * @param dto - Rejection reason payload.
-   * @param requester - JWT payload of the onboarding staff or super admin.
-   * @returns The rejected salon mapped to {@link SalonResponseDto}.
-   * @throws BadRequestException when the salon is not in PENDING status.
-   */
-  async reject(
-    id: string,
-    dto: RejectSalonDto,
-    requester: JwtPayload,
-  ): Promise<SalonResponseDto> {
-    const salon = await this.findEntityOrFail(id);
+    switch (dto.status) {
+      case SalonStatus.ACTIVE:
+        if (!isStaffOrAdmin) throw new ForbiddenException('Only ONBOARDING_STAFF or SUPER_ADMIN can approve salons');
+        if (salon.status !== SalonStatus.PENDING) throw new BadRequestException(`Only PENDING salons can be approved. Current status: ${salon.status}`);
+        salon.status          = SalonStatus.ACTIVE;
+        salon.isVerified      = true;
+        salon.verifiedBy      = requester.sub;
+        salon.verifiedAt      = new Date();
+        salon.rejectionReason = null;
+        break;
 
-    if (salon.status !== SalonStatus.PENDING) {
-      throw new BadRequestException(
-        `Only PENDING salons can be rejected. Current status: ${salon.status}`,
-      );
+      case SalonStatus.REJECTED:
+        if (!isStaffOrAdmin) throw new ForbiddenException('Only ONBOARDING_STAFF or SUPER_ADMIN can reject salons');
+        if (salon.status !== SalonStatus.PENDING) throw new BadRequestException(`Only PENDING salons can be rejected. Current status: ${salon.status}`);
+        if (!dto.rejectionReason) throw new BadRequestException('rejectionReason is required when rejecting a salon');
+        salon.status          = SalonStatus.REJECTED;
+        salon.verifiedBy      = requester.sub;
+        salon.rejectionReason = dto.rejectionReason;
+        break;
+
+      case SalonStatus.ARCHIVED:
+        this.assertWriteAccess(salon, requester);
+        if (salon.status === SalonStatus.ARCHIVED) throw new BadRequestException('Salon is already archived');
+        salon.status = SalonStatus.ARCHIVED;
+        break;
+
+      default:
+        throw new BadRequestException(`Status '${dto.status}' cannot be set via this endpoint`);
     }
-
-    salon.status          = SalonStatus.REJECTED;
-    salon.verifiedBy      = requester.sub;
-    salon.rejectionReason = dto.reason;
-
-    return SalonResponseDto.from(await this.salonRepo.save(salon));
-  }
-
-  // ─── Archive (soft status change, owner or admin) ─────────────────────────
-
-  /**
-   * Transitions a salon to ARCHIVED status (reversible soft status change).
-   *
-   * The record is preserved; the salon is removed from public listings but
-   * not from the database.
-   *
-   * @param id - UUID of the salon to archive.
-   * @param requester - JWT payload of the caller.
-   * @throws BadRequestException when the salon is already archived.
-   * @throws ForbiddenException when the caller lacks write access.
-   */
-  async archive(id: string, requester: JwtPayload): Promise<void> {
-    const salon = await this.findEntityOrFail(id);
-    this.assertWriteAccess(salon, requester);
-
-    if (salon.status === SalonStatus.ARCHIVED) {
-      throw new BadRequestException('Salon is already archived');
-    }
-
-    salon.status = SalonStatus.ARCHIVED;
-    await this.salonRepo.save(salon);
   }
 
   // ─── Hard soft-delete (SUPER_ADMIN only) ─────────────────────────────────

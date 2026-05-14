@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Salon } from './entities/salon.entity';
 import { SalonService } from './salon.service';
 import { SalonController } from './salon.controller';
+import { UploadModule } from '@modules/upload/upload.module';
 
 /**
  * Feature module that encapsulates all salon-related functionality.
@@ -13,7 +14,7 @@ import { SalonController } from './salon.controller';
  * introducing circular imports.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Salon])],
+  imports: [TypeOrmModule.forFeature([Salon]), UploadModule],
   controllers: [SalonController],
   providers: [SalonService],
   exports: [SalonService],

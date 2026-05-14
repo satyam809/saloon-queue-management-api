@@ -7,17 +7,25 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
-  Patch,
   Post,
+  Put,
   Query,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiNoContentResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+
+import { imageUploadOptions } from '@modules/upload/multer.options';
 import {
   ApiAuthErrors,
   ApiCommonErrors,
@@ -29,8 +37,6 @@ import {
 import { SalonService } from './salon.service';
 import { CreateSalonDto } from './dto/create-salon.dto';
 import { UpdateSalonDto } from './dto/update-salon.dto';
-import { ApproveSalonDto } from './dto/approve-salon.dto';
-import { RejectSalonDto } from './dto/reject-salon.dto';
 import { SalonQueryDto } from './dto/salon-query.dto';
 import { SalonResponseDto } from './dto/salon-response.dto';
 import { Public } from '@common/decorators/public.decorator';
@@ -149,134 +155,71 @@ export class SalonController {
   // ─── Update salon ─────────────────────────────────────────────────────────
 
   /**
-   * PATCH /salons/:id
+   * PUT /salons/:id
+   * Update salon details and/or replace its logo / cover image in one request.
+   * Send as `multipart/form-data`; all fields are optional.
    * SALON_OWNER: can update their own salon.
-   * SUPER_ADMIN: can update any salon (SALON_UPDATE_ANY bypasses ownership).
-   * The service enforces ownership for non-admins.
+   * SUPER_ADMIN: can update any salon.
    *
    * @param id - UUID of the salon to update.
-   * @param dto - Fields to update (all optional).
+   * @param dto - Text fields to update (all optional).
+   * @param files - Optional image files (`logo`, `cover`).
    * @param requester - JWT payload of the authenticated caller.
    * @returns The updated salon.
-   * @throws ForbiddenException when the caller does not own the salon and is not SUPER_ADMIN.
-   * @throws BadRequestException when the salon status prevents updates.
    */
-  @Patch(':id')
-  @RequirePermissions(Permission.SALON_UPDATE_OWN)
+  @Put(':id')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [{ name: 'logo', maxCount: 1 }, { name: 'cover', maxCount: 1 }],
+      imageUploadOptions('salons'),
+    ),
+  )
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
-    summary: 'Update salon details',
+    summary: 'Update salon',
     description:
-      'SALON_OWNER can update their own salon. ' +
-      'SUPER_ADMIN can update any salon.',
+      'Update details, upload images, approve, reject, or archive — all in one request. ' +
+      'Send as multipart/form-data. All fields are optional.\n\n' +
+      '**status field behaviour:**\n' +
+      '- `active` → approve (ONBOARDING_STAFF / SUPER_ADMIN only, salon must be PENDING)\n' +
+      '- `rejected` → reject (ONBOARDING_STAFF / SUPER_ADMIN only, `rejectionReason` required)\n' +
+      '- `archived` → archive (owner or SUPER_ADMIN)',
   })
   @ApiParam({ name: 'id', description: 'Salon UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name:                     { type: 'string' },
+        description:              { type: 'string' },
+        address:                  { type: 'string' },
+        city:                     { type: 'string' },
+        state:                    { type: 'string' },
+        country:                  { type: 'string' },
+        postalCode:               { type: 'string' },
+        latitude:                 { type: 'number' },
+        longitude:                { type: 'number' },
+        phone:                    { type: 'string' },
+        email:                    { type: 'string' },
+        avgServiceDurationMinutes: { type: 'integer' },
+        maxQueueSize:             { type: 'integer' },
+        timezone:                 { type: 'string' },
+        status:          { type: 'string', enum: ['active', 'rejected', 'archived'], description: 'Trigger a status transition' },
+        rejectionReason: { type: 'string', description: 'Required when status is rejected' },
+        logo:  { type: 'string', format: 'binary', description: 'Logo image (JPEG/PNG/WebP/GIF, max 5 MB)' },
+        cover: { type: 'string', format: 'binary', description: 'Cover image (JPEG/PNG/WebP/GIF, max 5 MB)' },
+      },
+    },
+  })
   @ApiOkWrapped(SalonResponseDto)
   @ApiCommonErrors()
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSalonDto,
+    @UploadedFiles() files: { logo?: Express.Multer.File[]; cover?: Express.Multer.File[] },
     @CurrentUser() requester: JwtPayload,
   ): Promise<SalonResponseDto> {
-    return this.salonService.update(id, dto, requester);
-  }
-
-  // ─── Approve ──────────────────────────────────────────────────────────────
-
-  /**
-   * PATCH /salons/:id/approve
-   * Sets status=ACTIVE, isVerified=true, records verifier.
-   * Only ONBOARDING_STAFF and SUPER_ADMIN can approve.
-   *
-   * @param id - UUID of the salon to approve.
-   * @param dto - Optional approval note.
-   * @param requester - JWT payload of the onboarding staff or super admin.
-   * @returns The approved salon with status ACTIVE.
-   * @throws BadRequestException when the salon is not in PENDING status.
-   */
-  @Patch(':id/approve')
-  @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
-  @RequirePermissions(Permission.SALON_VERIFY)
-  @ApiOperation({
-    summary: 'Approve a pending salon registration',
-    description:
-      'Transitions salon from PENDING → ACTIVE. ' +
-      'Records the verifier and timestamp. ' +
-      'Requires ONBOARDING_STAFF or SUPER_ADMIN role.',
-  })
-  @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiOkWrapped(SalonResponseDto)
-  @ApiCommonErrors()
-  approve(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ApproveSalonDto,
-    @CurrentUser() requester: JwtPayload,
-  ): Promise<SalonResponseDto> {
-    return this.salonService.approve(id, dto, requester);
-  }
-
-  // ─── Reject ───────────────────────────────────────────────────────────────
-
-  /**
-   * PATCH /salons/:id/reject
-   * Sets status=REJECTED, records the reason.
-   * Only ONBOARDING_STAFF and SUPER_ADMIN can reject.
-   *
-   * @param id - UUID of the salon to reject.
-   * @param dto - Rejection reason payload.
-   * @param requester - JWT payload of the onboarding staff or super admin.
-   * @returns The rejected salon with status REJECTED.
-   * @throws BadRequestException when the salon is not in PENDING status.
-   */
-  @Patch(':id/reject')
-  @Roles(Role.ONBOARDING_STAFF, Role.SUPER_ADMIN)
-  @RequirePermissions(Permission.SALON_VERIFY)
-  @ApiOperation({
-    summary: 'Reject a pending salon registration',
-    description:
-      'Transitions salon from PENDING → REJECTED. ' +
-      'The rejection reason is stored on the salon record.',
-  })
-  @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiOkWrapped(SalonResponseDto)
-  @ApiCommonErrors()
-  reject(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: RejectSalonDto,
-    @CurrentUser() requester: JwtPayload,
-  ): Promise<SalonResponseDto> {
-    return this.salonService.reject(id, dto, requester);
-  }
-
-  // ─── Archive ──────────────────────────────────────────────────────────────
-
-  /**
-   * PATCH /salons/:id/archive
-   * Soft status transition → ARCHIVED.
-   * Owner can archive their own salon; SUPER_ADMIN can archive any.
-   *
-   * @param id - UUID of the salon to archive.
-   * @param requester - JWT payload of the caller.
-   * @returns void (204 No Content).
-   * @throws BadRequestException when the salon is already archived.
-   * @throws ForbiddenException when the caller does not own the salon and is not SUPER_ADMIN.
-   */
-  @Patch(':id/archive')
-  @RequirePermissions(Permission.SALON_DELETE_OWN)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({
-    summary: 'Archive a salon (status → ARCHIVED)',
-    description:
-      'The salon record is preserved but the salon is no longer publicly listed. ' +
-      'Owner can archive their own; SUPER_ADMIN can archive any.',
-  })
-  @ApiParam({ name: 'id', description: 'Salon UUID' })
-  @ApiNoContentResponse({ description: 'Salon archived.' })
-  @ApiCommonErrors()
-  archive(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() requester: JwtPayload,
-  ): Promise<void> {
-    return this.salonService.archive(id, requester);
+    return this.salonService.update(id, dto, files, requester);
   }
 
   // ─── Permanent soft-delete (SUPER_ADMIN only) ─────────────────────────────
