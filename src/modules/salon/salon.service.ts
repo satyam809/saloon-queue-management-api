@@ -63,8 +63,6 @@ export class SalonService {
       postalCode:               dto.postalCode ?? null,
       latitude:                 dto.latitude ?? null,
       longitude:                dto.longitude ?? null,
-      phone:                    dto.phone ?? null,
-      email:                    dto.email ?? null,
       logoUrl:                  dto.logoUrl ?? null,
       coverImageUrl:            dto.coverImageUrl ?? null,
       avgServiceDurationMinutes: dto.avgServiceDurationMinutes ?? 30,

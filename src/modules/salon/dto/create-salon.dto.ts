@@ -1,5 +1,4 @@
 import {
-  IsEmail,
   IsIn,
   IsLatitude,
   IsLongitude,
@@ -7,7 +6,6 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
-  IsPhoneNumber,
   IsString,
   IsUrl,
   Max,
@@ -115,21 +113,6 @@ export class CreateSalonDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
-
-  // ─── Contact ────────────────────────────────────────────────────────────
-
-  /** Contact phone number in E.164 format (e.g. `'+12125551234'`). */
-  @ApiPropertyOptional({ example: '+12125551234' })
-  @IsOptional()
-  @IsPhoneNumber()
-  phone?: string;
-
-  /** Public contact email address (max 150 characters). */
-  @ApiPropertyOptional({ example: 'info@thestylestudio.com' })
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(150)
-  email?: string;
 
   // ─── Media ──────────────────────────────────────────────────────────────
 

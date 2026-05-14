@@ -74,9 +74,6 @@ CREATE TABLE salons (
   postal_code                 VARCHAR(20)     NULL,
   latitude                    DECIMAL(10,8)   NULL,
   longitude                   DECIMAL(11,8)   NULL,
-  -- Contact
-  phone                       VARCHAR(20)     NULL,
-  email                       VARCHAR(150)    NULL,
   -- Media
   logo_url                    VARCHAR(500)    NULL,
   cover_image_url             VARCHAR(500)    NULL,

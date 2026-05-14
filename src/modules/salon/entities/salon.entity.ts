@@ -94,16 +94,6 @@ export class Salon extends BaseEntity {
   @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true })
   longitude: number | null;
 
-  // ─── Contact ─────────────────────────────────────────────────────────────
-
-  /** Contact phone number for the salon (E.164 format recommended). */
-  @Column({ type: 'varchar', nullable: true, length: 20 })
-  phone: string | null;
-
-  /** Public contact email address for the salon. */
-  @Column({ type: 'varchar', nullable: true, length: 150 })
-  email: string | null;
-
   // ─── Media ───────────────────────────────────────────────────────────────
 
   /** URL of the salon's logo image. */

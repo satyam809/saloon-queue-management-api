@@ -68,14 +68,6 @@ export class SalonResponseDto {
   /** Geographic longitude of the salon, or `null` if not set. */
   @ApiPropertyOptional() longitude: number | null;
 
-  // Contact
-
-  /** Contact phone number for the salon, or `null` if not provided. */
-  @ApiPropertyOptional() phone: string | null;
-
-  /** Contact email address for the salon, or `null` if not provided. */
-  @ApiPropertyOptional() email: string | null;
-
   // Media
 
   /** URL of the salon's logo image, or `null` if not uploaded. */
@@ -157,8 +149,6 @@ export class SalonResponseDto {
     dto.postalCode                = salon.postalCode;
     dto.latitude                  = salon.latitude;
     dto.longitude                 = salon.longitude;
-    dto.phone                     = salon.phone;
-    dto.email                     = salon.email;
     dto.logoUrl                   = salon.logoUrl;
     dto.coverImageUrl             = salon.coverImageUrl;
     dto.status                    = salon.status;
