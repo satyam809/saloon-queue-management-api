@@ -31,6 +31,36 @@ export class UserService {
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
+  /**
+   * Internal: creates a user with an explicitly provided role, bypassing the
+   * SUPER_ADMIN gate. Only called from trusted internal flows (e.g. salon-owner
+   * self-registration where the role is determined by the endpoint, not the caller).
+   */
+  async createWithRole(dto: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    role: Role;
+  }): Promise<UserResponseDto> {
+    await this.assertEmailUnique(dto.email);
+
+    const user = this.userRepo.create({
+      name:         dto.name,
+      email:        dto.email,
+      phone:        dto.phone ?? null,
+      role:         dto.role,
+      passwordHash: await hashPassword(dto.password),
+    });
+
+    return UserResponseDto.from(await this.userRepo.save(user));
+  }
+
+  /** Internal: soft-deletes a user by ID. Used as a compensating action. */
+  async softDeleteById(id: string): Promise<void> {
+    await this.userRepo.softDelete(id);
+  }
+
   async create(dto: CreateUserDto, requester?: JwtPayload): Promise<UserResponseDto> {
     await this.assertEmailUnique(dto.email);
 

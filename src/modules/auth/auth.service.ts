@@ -282,7 +282,7 @@ export class AuthService {
    * @param user - User entity or response DTO supplying the JWT payload fields
    * @returns A fresh TokensDto with both tokens and their metadata
    */
-  private async generateTokens(user: User | UserResponseDto): Promise<TokensDto> {
+  async generateTokens(user: User | UserResponseDto): Promise<TokensDto> {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,

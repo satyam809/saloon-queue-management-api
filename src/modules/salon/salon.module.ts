@@ -4,6 +4,8 @@ import { Salon } from './entities/salon.entity';
 import { SalonService } from './salon.service';
 import { SalonController } from './salon.controller';
 import { UploadModule } from '@modules/upload/upload.module';
+import { UserModule } from '@modules/user/user.module';
+import { AuthModule } from '@modules/auth/auth.module';
 
 /**
  * Feature module that encapsulates all salon-related functionality.
@@ -14,7 +16,7 @@ import { UploadModule } from '@modules/upload/upload.module';
  * introducing circular imports.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([Salon]), UploadModule],
+  imports: [TypeOrmModule.forFeature([Salon]), UploadModule, UserModule, AuthModule],
   controllers: [SalonController],
   providers: [SalonService],
   exports: [SalonService],

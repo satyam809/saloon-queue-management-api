@@ -9,9 +9,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Salon } from './entities/salon.entity';
 import { CreateSalonDto } from './dto/create-salon.dto';
+import { RegisterSalonDto } from './dto/register-salon.dto';
 import { UpdateSalonDto } from './dto/update-salon.dto';
 import { SalonQueryDto } from './dto/salon-query.dto';
 import { SalonResponseDto } from './dto/salon-response.dto';
+import { SalonRegistrationResponseDto } from './dto/salon-registration-response.dto';
 import { paginate } from '@shared/utils/pagination.util';
 import { PaginatedResult } from '@common/interfaces/paginated-result.interface';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
@@ -20,6 +22,8 @@ import { SalonStatus } from '@common/enums/status.enum';
 import { Permission } from '@common/enums/permission.enum';
 import { canPerform } from '@common/rbac/rbac.util';
 import { UploadService } from '@modules/upload/upload.service';
+import { UserService } from '@modules/user/user.service';
+import { AuthService } from '@modules/auth/auth.service';
 
 /**
  * Business logic service for salon management.
@@ -34,7 +38,67 @@ export class SalonService {
     @InjectRepository(Salon)
     private readonly salonRepo: Repository<Salon>,
     private readonly uploadService: UploadService,
+    private readonly userService: UserService,
+    private readonly authService: AuthService,
   ) {}
+
+  // ─── Register (self-registration: new owner + salon in one request) ─────────
+
+  /**
+   * Creates a SALON_OWNER user account and a salon in PENDING status atomically.
+   * Called when POST /salons is invoked without an existing authenticated session.
+   *
+   * If salon creation fails after the user has been persisted, a soft-delete
+   * compensating action frees the email address for a subsequent retry.
+   *
+   * @param dto - Full salon payload plus the nested `owner` registration fields.
+   * @returns JWT token pair, the new owner's profile, and the created salon.
+   */
+  async register(
+    dto: RegisterSalonDto,
+    files?: { logo?: Express.Multer.File[]; cover?: Express.Multer.File[] },
+  ): Promise<SalonRegistrationResponseDto> {
+    const owner = dto.owner!;
+
+    const user = await this.userService.createWithRole({
+      name:     owner.name,
+      email:    owner.email,
+      password: owner.password,
+      phone:    owner.phone,
+      role:     Role.SALON_OWNER,
+    });
+
+    const ownerPayload: JwtPayload = {
+      sub:   user.id,
+      email: user.email,
+      role:  user.role as Role,
+    };
+
+    const { owner: _, ...salonFields } = dto;
+
+    let salon: SalonResponseDto;
+    try {
+      salon = await this.create(salonFields as CreateSalonDto, ownerPayload, files);
+    } catch (err) {
+      await this.userService.softDeleteById(user.id);
+      throw err;
+    }
+
+    await this.userService.updateLastLogin(user.id);
+    const tokens = await this.authService.generateTokens(user);
+
+    return {
+      tokens,
+      user: {
+        id:        user.id,
+        name:      user.name,
+        email:     user.email,
+        role:      user.role as Role,
+        avatarUrl: user.avatarUrl ?? null,
+      },
+      salon,
+    };
+  }
 
   // ─── Create ───────────────────────────────────────────────────────────────
 
@@ -48,7 +112,11 @@ export class SalonService {
    * @param requester - JWT payload of the authenticated owner.
    * @returns The persisted salon mapped to {@link SalonResponseDto}.
    */
-  async create(dto: CreateSalonDto, requester: JwtPayload): Promise<SalonResponseDto> {
+  async create(
+    dto: CreateSalonDto,
+    requester: JwtPayload,
+    files?: { logo?: Express.Multer.File[]; cover?: Express.Multer.File[] },
+  ): Promise<SalonResponseDto> {
     const slug = await this.generateUniqueSlug(dto.name);
 
     const salon = this.salonRepo.create({
@@ -63,8 +131,12 @@ export class SalonService {
       postalCode:               dto.postalCode ?? null,
       latitude:                 dto.latitude ?? null,
       longitude:                dto.longitude ?? null,
-      logoUrl:                  dto.logoUrl ?? null,
-      coverImageUrl:            dto.coverImageUrl ?? null,
+      logoUrl:                  files?.logo?.[0]
+                                  ? `/uploads/salons/${files.logo[0].filename}`
+                                  : (dto.logoUrl ?? null),
+      coverImageUrl:            files?.cover?.[0]
+                                  ? `/uploads/salons/${files.cover[0].filename}`
+                                  : (dto.coverImageUrl ?? null),
       avgServiceDurationMinutes: dto.avgServiceDurationMinutes ?? 30,
       maxQueueSize:             dto.maxQueueSize ?? 20,
       workingHours:             dto.workingHours ?? null,

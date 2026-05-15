@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
@@ -35,15 +36,14 @@ import {
   ApiPaginatedResponse,
 } from '@common/swagger/decorators';
 import { SalonService } from './salon.service';
-import { CreateSalonDto } from './dto/create-salon.dto';
+import { RegisterSalonDto } from './dto/register-salon.dto';
 import { UpdateSalonDto } from './dto/update-salon.dto';
 import { SalonQueryDto } from './dto/salon-query.dto';
 import { SalonResponseDto } from './dto/salon-response.dto';
+import { SalonRegistrationResponseDto } from './dto/salon-registration-response.dto';
 import { Public } from '@common/decorators/public.decorator';
 import { Roles } from '@common/decorators/roles.decorator';
-import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
-import { Permission } from '@common/enums/permission.enum';
 import { Role } from '@common/enums/role.enum';
 import { JwtPayload } from '@common/interfaces/jwt-payload.interface';
 
@@ -122,34 +122,83 @@ export class SalonController {
     return this.salonService.findOne(id, requester);
   }
 
-  // ─── Create a salon ───────────────────────────────────────────────────────
+  // ─── Create / register a salon ────────────────────────────────────────────
 
   /**
    * POST /salons
-   * The authenticated user becomes the salon owner.
-   * Requires SALON_CREATE permission (granted to SALON_OWNER, SUPER_ADMIN).
    *
-   * @param dto - Salon creation payload.
-   * @param requester - JWT payload of the authenticated caller who will own the salon.
-   * @returns The newly created salon in PENDING status.
-   * @throws ConflictException when a slug collision cannot be resolved.
+   * Two modes, selected by whether `owner` is present in the request body:
+   *
+   * **Registration mode** (`owner` provided, no auth required):
+   * Creates a SALON_OWNER user account and a salon in one request.
+   * Returns auth tokens so the new owner is immediately logged in.
+   *
+   * **Authenticated mode** (`owner` absent, Bearer token required):
+   * The authenticated SALON_OWNER or SUPER_ADMIN becomes the salon owner.
+   * Returns only the salon record.
+   *
+   * In both cases the salon starts in PENDING status and must be approved
+   * by onboarding staff before going ACTIVE.
    */
+  @Public()
   @Post()
-  @RequirePermissions(Permission.SALON_CREATE)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [{ name: 'logo', maxCount: 1 }, { name: 'cover', maxCount: 1 }],
+      imageUploadOptions('salons'),
+    ),
+  )
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Register a new salon',
     description:
-      'Creates a salon in PENDING status assigned to the authenticated user. ' +
-      'An onboarding staff member must approve it before it goes ACTIVE.',
+      'Two modes:\n\n' +
+      '**Registration** — include `owner` (name/email/password) to self-register ' +
+      'as a new SALON_OWNER and create the salon in one request. Returns tokens + user + salon.\n\n' +
+      '**Authenticated** — omit `owner` and pass a Bearer token. Returns the salon record only.\n\n' +
+      'Send as `multipart/form-data`. Both `logo` and `cover` image files are optional.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name:                     { type: 'string' },
+        description:              { type: 'string' },
+        address:                  { type: 'string' },
+        city:                     { type: 'string' },
+        state:                    { type: 'string' },
+        country:                  { type: 'string' },
+        postalCode:               { type: 'string' },
+        latitude:                 { type: 'number' },
+        longitude:                { type: 'number' },
+        avgServiceDurationMinutes: { type: 'integer' },
+        maxQueueSize:             { type: 'integer' },
+        timezone:                 { type: 'string' },
+        logo:  { type: 'string', format: 'binary', description: 'Logo image (JPEG/PNG/WebP/GIF, max 5 MB)' },
+        cover: { type: 'string', format: 'binary', description: 'Cover image (JPEG/PNG/WebP/GIF, max 5 MB)' },
+        'owner[name]':     { type: 'string', description: 'Owner name (registration mode only)' },
+        'owner[email]':    { type: 'string', description: 'Owner email (registration mode only)' },
+        'owner[password]': { type: 'string', description: 'Owner password (registration mode only)' },
+        'owner[phone]':    { type: 'string', description: 'Owner phone — optional' },
+      },
+    },
   })
   @ApiCreatedWrapped(SalonResponseDto)
   @ApiCommonErrors()
   @ApiConflictErrors()
-  create(
-    @Body() dto: CreateSalonDto,
+  async create(
+    @Body() dto: RegisterSalonDto,
+    @UploadedFiles() files: { logo?: Express.Multer.File[]; cover?: Express.Multer.File[] },
     @CurrentUser() requester: JwtPayload,
-  ): Promise<SalonResponseDto> {
-    return this.salonService.create(dto, requester);
+  ): Promise<SalonResponseDto | SalonRegistrationResponseDto> {
+    if (dto.owner) {
+      return this.salonService.register(dto, files);
+    }
+    if (!requester) {
+      throw new UnauthorizedException('Authentication required to create a salon without owner registration');
+    }
+    return this.salonService.create(dto, requester, files);
   }
 
   // ─── Update salon ─────────────────────────────────────────────────────────
