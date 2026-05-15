@@ -248,7 +248,7 @@ export class SalonService {
       this.applyStatusTransition(salon, dto, requester);
     }
 
-    const { status, rejectionReason, ...fields } = dto;
+    const { status, rejectionReason, owner, ...fields } = dto;
 
     if (Object.keys(fields).length || files?.logo?.[0] || files?.cover?.[0]) {
       this.assertWriteAccess(salon, requester);
@@ -279,7 +279,19 @@ export class SalonService {
       }
     }
 
-    return SalonResponseDto.from(await this.salonRepo.save(salon));
+    if (owner) {
+      if (requester.role !== Role.SUPER_ADMIN && salon.addedById !== requester.sub) {
+        throw new ForbiddenException('You do not have permission to update owner details');
+      }
+      await this.userService.updateOwnerDetails(
+        salon.addedById,
+        owner,
+        requester.role === Role.SUPER_ADMIN,
+      );
+    }
+
+    await this.salonRepo.save(salon);
+    return SalonResponseDto.from(await this.findEntityOrFail(id));
   }
 
   private applyStatusTransition(salon: Salon, dto: UpdateSalonDto, requester: JwtPayload): void {

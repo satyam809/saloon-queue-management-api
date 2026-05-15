@@ -173,6 +173,36 @@ export class UserService {
     return UserResponseDto.from(await this.userRepo.save(user));
   }
 
+  // ─── Update: salon owner details (called from SalonService) ─────────────
+
+  async updateOwnerDetails(
+    userId: string,
+    dto: { name?: string; phone?: string; newPassword?: string; currentPassword?: string },
+    isAdmin: boolean,
+  ): Promise<UserResponseDto> {
+    const user = await this.findEntityOrFail(userId);
+
+    if (dto.phone && dto.phone !== user.phone) {
+      await this.assertPhoneUnique(dto.phone, userId);
+    }
+
+    if (dto.newPassword) {
+      if (!isAdmin) {
+        if (!dto.currentPassword) {
+          throw new BadRequestException('currentPassword is required when changing password');
+        }
+        const valid = await comparePassword(dto.currentPassword, user.passwordHash);
+        if (!valid) throw new BadRequestException('Current password is incorrect');
+      }
+      user.passwordHash = await hashPassword(dto.newPassword);
+    }
+
+    if (dto.name !== undefined) user.name = dto.name;
+    if (dto.phone !== undefined) user.phone = dto.phone ?? null;
+
+    return UserResponseDto.from(await this.userRepo.save(user));
+  }
+
   // ─── Update: admin edit any user ──────────────────────────────────────────
 
   async adminUpdate(
